@@ -21,11 +21,11 @@ import org.kvxd.pakmc.utils.jsonFormat
 
 class AddCommand : CliktCommand(name = "add") {
 
-    private val queries by argument(help = "Mod slug(s), ID(s), or name(s)").multiple(required = true)
+    private val queries by argument(help = "Mod slug(s), ID(s), URL(s), or name(s)").multiple(required = true)
 
     private val version by argument(help = "Specific version (applies to all if multiple mods)").optional()
 
-    private val provider by option("--provider", help = "Mod provider").choice("mr", "modrinth", "cf", "curseforge")
+    private val provider by option("--provider", help = "Default mod provider (overridden if URL provided)").choice("mr", "modrinth", "cf", "curseforge")
         .default("mr")
     private val side by option("--side", help = "Side restriction").choice("c", "client", "s", "server").default("both")
     private val apiKey by option("--api-key", help = "CurseForge API Key (optional, defaults to built-in)")
@@ -58,18 +58,33 @@ class AddCommand : CliktCommand(name = "add") {
             }
         }
 
-        val normProvider = if (provider in listOf("cf", "curseforge")) "cf" else "mr"
-        val key = apiKey ?: config.curseForgeApiKey
+        val defaultNormProvider = if (provider in listOf("cf", "curseforge")) "cf" else "mr"
+        val cfKey = apiKey ?: config.curseForgeApiKey
 
-        queries.forEach { query ->
-            if (normProvider == "mr") {
+        queries.forEach { rawQuery ->
+            val (query, detectedProvider) = resolveIdentity(rawQuery, defaultNormProvider)
+
+            if (detectedProvider == "mr") {
                 addModrinthRecursive(query, version, config, side, depth = 0)
             } else {
-                addCurseForgeRecursive(query, version, config, side, key, depth = 0)
+                addCurseForgeRecursive(query, version, config, side, cfKey, depth = 0)
             }
         }
     }
 
+    private fun resolveIdentity(input: String, defaultProvider: String): Pair<String, String> {
+        val mrRegex = Regex("modrinth\\.com/(?:mod|plugin|datapack|resourcepack|shader|project)/([^/?#]+)")
+        mrRegex.find(input)?.let {
+            return it.groupValues[1] to "mr"
+        }
+
+        val cfRegex = Regex("curseforge\\.com/minecraft/mc-mods/([^/?#]+)")
+        cfRegex.find(input)?.let {
+            return it.groupValues[1] to "cf"
+        }
+
+        return input to defaultProvider
+    }
 
     private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, side: String, depth: Int) {
         if (depth > 0 && shouldSkip(query)) return
