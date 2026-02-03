@@ -18,14 +18,24 @@ import org.kvxd.pakmc.models.PakConfig
 import okio.Path.Companion.toPath
 import org.kvxd.pakmc.utils.fs
 import org.kvxd.pakmc.utils.jsonFormat
+import org.kvxd.pakmc.models.MrVersion
+import org.kvxd.pakmc.models.CfFile
 
 class AddCommand : CliktCommand(name = "add") {
 
     private val queries by argument(help = "Mod slug(s), ID(s), URL(s), or name(s)").multiple(required = true)
 
-    private val version by option("-v", "--version", help = "Specific version (applies to all if multiple mods)")
+    private val version by option("-v", "--version", help = "Specific version ID (applies to all if multiple mods)")
+    private val selectVersion by option(
+        "-sv",
+        "--select-version",
+        help = "Interactively select a version"
+    ).flag(default = false)
 
-    private val provider by option("--provider", help = "Default mod provider (overridden if URL provided)").choice("mr", "modrinth", "cf", "curseforge")
+    private val provider by option(
+        "--provider",
+        help = "Default mod provider (overridden if URL provided)"
+    ).choice("mr", "modrinth", "cf", "curseforge")
         .default("mr")
     private val side by option("--side", help = "Side restriction").choice("c", "client", "s", "server").default("both")
     private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
@@ -59,7 +69,8 @@ class AddCommand : CliktCommand(name = "add") {
                         val meta = jsonFormat.decodeFromString<LocalModMeta>(fs.read(path) { readUtf8() })
                         addedSlugs.add(meta.slug)
                         addedIds.add(meta.projectId)
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -72,7 +83,6 @@ class AddCommand : CliktCommand(name = "add") {
 
             if (detectedProvider == "mr") {
                 val foundOnMr = addModrinthRecursive(query, version, config, side, depth = 0)
-
                 val isDirectUrl = rawQuery.contains("modrinth.com")
                 if (!foundOnMr && !isDirectUrl) {
                     fallbackToCurseForge(query, version, config, side, cfKey)
@@ -97,7 +107,13 @@ class AddCommand : CliktCommand(name = "add") {
         return input to defaultProvider
     }
 
-    private suspend fun fallbackToCurseForge(query: String, version: String?, config: PakConfig, side: String, key: String?) {
+    private suspend fun fallbackToCurseForge(
+        query: String,
+        version: String?,
+        config: PakConfig,
+        side: String,
+        key: String?
+    ) {
         val mod = CurseForgeApi.searchMod(query, key)
 
         if (mod != null) {
@@ -115,10 +131,15 @@ class AddCommand : CliktCommand(name = "add") {
         }
     }
 
-    private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, requestedSide: String, depth: Int): Boolean {
+    private suspend fun addModrinthRecursive(
+        query: String,
+        versionId: String?,
+        config: PakConfig,
+        requestedSide: String,
+        depth: Int
+    ): Boolean {
         val project = ModrinthApi.getProject(query) ?: run {
-            if (depth > 0)
-                t.println(red("! Project '$query' not found on Modrinth (dependency)."))
+            if (depth > 0) t.println(red("! Project '$query' not found on Modrinth (dependency)."))
             return false
         }
 
@@ -134,26 +155,22 @@ class AddCommand : CliktCommand(name = "add") {
 
         val allVersions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
 
-        val validVersions = if (allowUnstable) {
-            allVersions
-        } else {
-            allVersions.filter { it.version_type == "release" }
-        }
+        val compatibleVersions = if (allowUnstable) allVersions else allVersions.filter { it.version_type == "release" }
 
-        if (validVersions.isEmpty()) {
-            if (allVersions.isNotEmpty()) {
-                t.println(red("! No release versions found for '") + white(project.title) + red("'. Use --allow-unstable to include beta/alpha."))
-            } else {
-                t.println(red("! No compatible versions found for '") + white(project.title) + red("' on ${config.loader} ${config.mcVersion}"))
-            }
+        if (compatibleVersions.isEmpty()) {
+            if (depth == 0) t.println(red("! No compatible versions found for '") + white(project.title) + red("'"))
             return true
         }
 
-        val selected = versionId?.let { v -> validVersions.find { it.id == v || it.version_number == v } }
-            ?: validVersions.firstOrNull()
+        val selected = if (depth == 0 && selectVersion) {
+            promptForModrinthVersion(compatibleVersions, project.title)
+        } else {
+            versionId?.let { v -> compatibleVersions.find { it.id == v || it.version_number == v } }
+                ?: compatibleVersions.firstOrNull()
+        }
 
         if (selected == null) {
-            t.println(red("! Version '$versionId' not found for '") + white(project.title) + red("'"))
+            if (!selectVersion) t.println(red("! Version not found or selection cancelled."))
             return true
         }
 
@@ -164,17 +181,17 @@ class AddCommand : CliktCommand(name = "add") {
 
             printModStatus(project.title, isManual = false, manualLink = null, depth = depth, side = effectiveSide)
 
-            saveMeta(LocalModMeta(
-                name = project.title, slug = project.slug, provider = "mr", side = effectiveSide,
-                fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
-                fileSize = file.size, projectId = project.id
-            ))
+            saveMeta(
+                LocalModMeta(
+                    name = project.title, slug = project.slug, provider = "mr", side = effectiveSide,
+                    fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
+                    fileSize = file.size, projectId = project.id
+                )
+            )
 
             track(project.id, project.slug)
         } else {
-            if (depth == 0) {
-                t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
-            }
+            if (depth == 0) t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
         }
 
         selected.dependencies.filter { it.dependency_type == "required" }.forEach { dep ->
@@ -185,7 +202,41 @@ class AddCommand : CliktCommand(name = "add") {
         return true
     }
 
-    private suspend fun addCurseForgeRecursive(query: String, version: String?, config: PakConfig, side: String, key: String?, depth: Int) {
+    private fun promptForModrinthVersion(versions: List<MrVersion>, title: String): MrVersion? {
+        t.println(cyan("Versions for $title:"))
+        versions.take(15).forEachIndexed { index, v ->
+            val typeColor = if (v.version_type == "release") green else yellow
+            t.println(
+                "${index + 1}. ${typeColor(v.version_type.uppercase())} ${white(v.version_number)} ${
+                    gray(
+                        "(${
+                            v.date_published.take(
+                                10
+                            )
+                        })"
+                    )
+                }"
+            )
+        }
+
+        t.print("Select version (1-${minOf(versions.size, 15)}): ")
+        val idx = readlnOrNull()?.toIntOrNull()
+
+        if (idx != null && idx in 1..minOf(versions.size, 15)) {
+            return versions[idx - 1]
+        }
+
+        return null
+    }
+
+    private suspend fun addCurseForgeRecursive(
+        query: String,
+        version: String?,
+        config: PakConfig,
+        side: String,
+        key: String?,
+        depth: Int
+    ) {
         val mod = query.toIntOrNull()?.let { CurseForgeApi.getMod(it, key) } ?: CurseForgeApi.searchMod(query, key)
 
         if (mod == null) {
@@ -197,26 +248,21 @@ class AddCommand : CliktCommand(name = "add") {
         visitedProjects.add(mod.id.toString())
 
         val allFiles = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
+        val compatibleFiles = if (allowUnstable) allFiles else allFiles.filter { it.releaseType == 1 }
 
-        val validFiles = if (allowUnstable) {
-            allFiles
-        } else {
-            allFiles.filter { it.releaseType == 1 }
-        }
-
-        val selected = version?.let { v -> validFiles.find { it.displayName.contains(v) || it.fileName.contains(v) } }
-            ?: validFiles.firstOrNull()
-
-        if (selected == null) {
-            if (depth == 0) {
-                if (allFiles.isNotEmpty()) {
-                    t.println(red("! No release files found for '${mod.name}'. Use --allow-unstable."))
-                } else {
-                    t.println(red("! No compatible files found for '${mod.name}' on MC ${config.mcVersion}"))
-                }
-            }
+        if (compatibleFiles.isEmpty()) {
+            if (depth == 0) t.println(red("! No compatible files found for '${mod.name}'"))
             return
         }
+
+        val selected = if (depth == 0 && selectVersion) {
+            promptForCurseForgeVersion(compatibleFiles, mod.name)
+        } else {
+            version?.let { v -> compatibleFiles.find { it.displayName.contains(v) || it.fileName.contains(v) } }
+                ?: compatibleFiles.firstOrNull()
+        }
+
+        if (selected == null) return
 
         val isAlreadyInstalled = shouldSkip(mod.id.toString(), mod.slug)
 
@@ -229,33 +275,47 @@ class AddCommand : CliktCommand(name = "add") {
             printModStatus(mod.name, isManual, manualLink, depth, side)
 
             if (depth == 0 && side == "both") {
-                t.println(yellow("   ⚠ Side defaulted to 'both'. Check if this is a Client/Server only mod."))
+                t.println(yellow("   ⚠ Side defaulted to 'both'."))
             }
 
-            saveMeta(LocalModMeta(
-                name = mod.name,
-                slug = mod.slug,
-                provider = if (isManual) "cf_manual" else "cf",
-                side = side,
-                fileName = selected.fileName,
-                hashes = mapOf("sha1" to sha1),
-                downloadUrl = dUrl,
-                fileSize = selected.fileLength,
-                projectId = mod.id.toString(),
-                manualLink = if (isManual) manualLink else null
-            ))
+            saveMeta(
+                LocalModMeta(
+                    name = mod.name, slug = mod.slug, provider = if (isManual) "cf_manual" else "cf",
+                    side = side, fileName = selected.fileName, hashes = mapOf("sha1" to sha1),
+                    downloadUrl = dUrl, fileSize = selected.fileLength, projectId = mod.id.toString(),
+                    manualLink = if (isManual) manualLink else null
+                )
+            )
 
             track(mod.id.toString(), mod.slug)
         } else {
-            if (depth == 0) {
-                t.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
-            }
+            if (depth == 0) t.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
         }
 
         selected.dependencies.filter { it.relationType == 3 }.forEach { dep ->
-            val depId = dep.modId.toString()
-            addCurseForgeRecursive(depId, null, config, side, key, depth + 1)
+            addCurseForgeRecursive(dep.modId.toString(), null, config, side, key, depth + 1)
         }
+    }
+
+    private fun promptForCurseForgeVersion(files: List<CfFile>, title: String): CfFile? {
+        t.println(cyan("Files for $title:"))
+        files.take(15).forEachIndexed { index, f ->
+            val type = when (f.releaseType) {
+                1 -> "R"; 2 -> "B"; else -> "A"
+            }
+            val color = if (f.releaseType == 1) green else yellow
+
+            t.println("${index + 1}. ${color(type)} ${white(f.displayName)} ${gray("(${f.fileDate.take(10)})")}")
+        }
+
+        t.print("Select file (1-${minOf(files.size, 15)}): ")
+
+        val idx = readlnOrNull()?.toIntOrNull()
+        if (idx != null && idx in 1..minOf(files.size, 15)) {
+            return files[idx - 1]
+        }
+
+        return null
     }
 
     private fun shouldSkip(id: String, slug: String? = null): Boolean {
