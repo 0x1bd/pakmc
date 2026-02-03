@@ -11,11 +11,10 @@ jobs:
     container: amazoncorretto:21-al2023
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: dnf install -y tar gzip git libcurl-devel openssl-devel
 
-      - name: Install native dependencies
-        run: |
-          dnf install -y tar gzip libcurl-devel openssl-devel
+      - uses: actions/checkout@v4
 
       - name: Make gradlew executable
         run: chmod +x gradlew
