@@ -19,7 +19,7 @@ class InitCommand : CliktCommand(name = "init") {
     private val mc by option("--mc", help = "Minecraft Version").required()
     private val loader by option("--loader", help = "Mod Loader (neoforge, fabric, forge)").required()
     private val author by option("--author", help = "Modpack author").default("Unknown")
-    private val cfKey by option("--cf-key", help = "CurseForge API Key (optional, saves to config)")
+    private val cfKey by option("--cf-key", help = "CurseForge API Key (optional)")
     private val t = Terminal()
 
     override fun help(context: Context): String = "Initialize a new modpack"
@@ -33,24 +33,15 @@ class InitCommand : CliktCommand(name = "init") {
         }
 
         val config = PakConfig(
-            name = name,
-            author = author,
-            mcVersion = mc,
-            loader = loader,
-            curseForgeApiKey = cfKey
+            name = name, author = author, mcVersion = mc,
+            loader = loader, curseForgeApiKey = cfKey
         )
 
-        val dirs = listOf(
-            "contents/mods",
-            "contents/jarmods",
-            "contents/configs"
-        )
-
-        dirs.forEach { fs.createDirectories(it.toPath()) }
-
-        fs.write(configFile) {
-            writeUtf8(jsonFormat.encodeToString(config))
+        listOf("contents/mods", "contents/jarmods", "contents/configs").forEach {
+            fs.createDirectories(it.toPath())
         }
+
+        fs.write(configFile) { writeUtf8(jsonFormat.encodeToString(config)) }
 
         t.println(green("Initialized modpack '$name' for Minecraft $mc ($loader)"))
         if (cfKey != null) t.println(gray("CurseForge API Key saved."))
