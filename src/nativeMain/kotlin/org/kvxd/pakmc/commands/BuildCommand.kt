@@ -32,10 +32,8 @@ class BuildCommand : CliktCommand(name = "build") {
         val configStr = fs.read("pakmc.json".toPath()) { readUtf8() }
         val config = jsonFormat.decodeFromString<PakConfig>(configStr)
 
-        // --- STEP 1: PRE-FLIGHT CHECK ---
         validateManualMods()
 
-        // --- STEP 2: BUILD ---
         if (target == "client") buildClient(config) else buildServer(config)
     }
 
@@ -93,7 +91,6 @@ class BuildCommand : CliktCommand(name = "build") {
             fs.list(modsPath).filter { it.name.endsWith(".json") }.forEach { path ->
                 val meta = jsonFormat.decodeFromString<LocalModMeta>(fs.read(path) { readUtf8() })
 
-                // Manual mods go to overrides, not index
                 if (meta.downloadUrl.isBlank()) return@forEach
 
                 val finalHashes = if (meta.hashes.containsKey("sha512") && meta.hashes.containsKey("sha1")) {
