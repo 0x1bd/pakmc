@@ -90,7 +90,7 @@ class AddCommand : CliktCommand(name = "add") {
         return input to defaultProvider
     }
 
-    private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, side: String, depth: Int) {
+    private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, requestedSide: String, depth: Int) {
         val project = ModrinthApi.getProject(query) ?: run {
             t.println(red("! Project '$query' not found on Modrinth."))
             return
@@ -98,6 +98,14 @@ class AddCommand : CliktCommand(name = "add") {
 
         if (visitedProjects.contains(project.id)) return
         visitedProjects.add(project.id)
+
+        val detectedSide = when {
+            project.client_side == "unsupported" && project.server_side != "unsupported" -> "server"
+            project.server_side == "unsupported" && project.client_side != "unsupported" -> "client"
+            else -> "both"
+        }
+
+        val effectiveSide = if (requestedSide == "both") detectedSide else requestedSide
 
         val versions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
         if (versions.isEmpty()) {
@@ -118,10 +126,10 @@ class AddCommand : CliktCommand(name = "add") {
         if (!isAlreadyInstalled) {
             val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
 
-            printModStatus(project.title, isManual = false, manualLink = null, depth = depth)
+            printModStatus(project.title, isManual = false, manualLink = null, depth = depth, side = effectiveSide)
 
             saveMeta(LocalModMeta(
-                name = project.title, slug = project.slug, provider = "mr", side = side,
+                name = project.title, slug = project.slug, provider = "mr", side = effectiveSide,
                 fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
                 fileSize = file.size, projectId = project.id
             ))
@@ -135,7 +143,7 @@ class AddCommand : CliktCommand(name = "add") {
 
         selected.dependencies.filter { it.dependency_type == "required" }.forEach { dep ->
             dep.project_id?.let { pid ->
-                addModrinthRecursive(pid, dep.version_id, config, side, depth + 1)
+                addModrinthRecursive(pid, dep.version_id, config, requestedSide, depth + 1)
             }
         }
     }
@@ -168,7 +176,11 @@ class AddCommand : CliktCommand(name = "add") {
             val dUrl = selected.downloadUrl ?: ""
             val manualLink = "https://www.curseforge.com/minecraft/mc-mods/${mod.slug}/download/${selected.id}"
 
-            printModStatus(mod.name, isManual, manualLink, depth)
+            printModStatus(mod.name, isManual, manualLink, depth, side)
+
+            if (depth == 0 && side == "both") {
+                t.println(yellow("   ⚠ Side defaulted to 'both'. Check if this is a Client/Server only mod."))
+            }
 
             saveMeta(LocalModMeta(
                 name = mod.name,
@@ -205,15 +217,16 @@ class AddCommand : CliktCommand(name = "add") {
         addedSlugs.add(slug)
     }
 
-    private fun printModStatus(name: String, isManual: Boolean, manualLink: String?, depth: Int) {
+    private fun printModStatus(name: String, isManual: Boolean, manualLink: String?, depth: Int, side: String? = null) {
         val indent = "   ".repeat(depth)
         val symbol = if (depth == 0) "+ " else "└─ "
+        val sideInfo = if (side != null && side != "both") gray(" ($side)") else ""
 
         if (isManual) {
-            t.println(yellow("$indent$symbol Manual Download: ") + white(name))
+            t.println(yellow("$indent$symbol Manual Download: ") + white(name) + sideInfo)
             t.println(gray("$indent   Link: ") + blue(manualLink ?: "Unknown"))
         } else {
-            t.println(green("$indent$symbol Adding: ") + white(name))
+            t.println(green("$indent$symbol Adding: ") + white(name) + sideInfo)
         }
     }
 
