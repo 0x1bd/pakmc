@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.mordant.rendering.TextColors.*
@@ -27,6 +28,7 @@ class AddCommand : CliktCommand(name = "add") {
     private val provider by option("--provider", help = "Default mod provider (overridden if URL provided)").choice("mr", "modrinth", "cf", "curseforge")
         .default("mr")
     private val side by option("--side", help = "Side restriction").choice("c", "client", "s", "server").default("both")
+    private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
     private val apiKey by option("--api-key", help = "CurseForge API Key (optional, defaults to built-in)")
 
     private val t = Terminal()
@@ -115,7 +117,7 @@ class AddCommand : CliktCommand(name = "add") {
 
     private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, requestedSide: String, depth: Int): Boolean {
         val project = ModrinthApi.getProject(query) ?: run {
-            if (depth != 0)
+            if (depth > 0)
                 t.println(red("! Project '$query' not found on Modrinth (dependency)."))
             return false
         }
@@ -128,17 +130,27 @@ class AddCommand : CliktCommand(name = "add") {
             project.server_side == "unsupported" && project.client_side != "unsupported" -> "client"
             else -> "both"
         }
-
         val effectiveSide = if (requestedSide == "both") detectedSide else requestedSide
 
-        val versions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
-        if (versions.isEmpty()) {
-            t.println(red("! No valid versions found for '") + white(project.title) + red("' on ${config.loader} ${config.mcVersion}"))
+        val allVersions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
+
+        val validVersions = if (allowUnstable) {
+            allVersions
+        } else {
+            allVersions.filter { it.version_type == "release" }
+        }
+
+        if (validVersions.isEmpty()) {
+            if (allVersions.isNotEmpty()) {
+                t.println(red("! No release versions found for '") + white(project.title) + red("'. Use --allow-unstable to include beta/alpha."))
+            } else {
+                t.println(red("! No compatible versions found for '") + white(project.title) + red("' on ${config.loader} ${config.mcVersion}"))
+            }
             return true
         }
 
-        val selected = versionId?.let { v -> versions.find { it.id == v || it.version_number == v } }
-            ?: versions.firstOrNull()
+        val selected = versionId?.let { v -> validVersions.find { it.id == v || it.version_number == v } }
+            ?: validVersions.firstOrNull()
 
         if (selected == null) {
             t.println(red("! Version '$versionId' not found for '") + white(project.title) + red("'"))
@@ -167,7 +179,7 @@ class AddCommand : CliktCommand(name = "add") {
 
         selected.dependencies.filter { it.dependency_type == "required" }.forEach { dep ->
             dep.project_id?.let { pid ->
-                addModrinthRecursive(pid, dep.version_id, config, requestedSide, depth + 1)
+                addModrinthRecursive(pid, dep.version_id, config, effectiveSide, depth + 1)
             }
         }
         return true
@@ -184,12 +196,25 @@ class AddCommand : CliktCommand(name = "add") {
         if (visitedProjects.contains(mod.id.toString())) return
         visitedProjects.add(mod.id.toString())
 
-        val files = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
-        val selected = version?.let { v -> files.find { it.displayName.contains(v) || it.fileName.contains(v) } }
-            ?: files.firstOrNull()
+        val allFiles = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
+
+        val validFiles = if (allowUnstable) {
+            allFiles
+        } else {
+            allFiles.filter { it.releaseType == 1 }
+        }
+
+        val selected = version?.let { v -> validFiles.find { it.displayName.contains(v) || it.fileName.contains(v) } }
+            ?: validFiles.firstOrNull()
 
         if (selected == null) {
-            if (depth == 0) t.println(red("! No compatible files found for '${mod.name}' on MC ${config.mcVersion}"))
+            if (depth == 0) {
+                if (allFiles.isNotEmpty()) {
+                    t.println(red("! No release files found for '${mod.name}'. Use --allow-unstable."))
+                } else {
+                    t.println(red("! No compatible files found for '${mod.name}' on MC ${config.mcVersion}"))
+                }
+            }
             return
         }
 

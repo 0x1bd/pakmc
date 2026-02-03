@@ -18,7 +18,6 @@ object LoaderResolver {
     suspend fun resolve(loader: String, mcVersion: String): Pair<String, String> {
         return when (loader.lowercase()) {
             "fabric" -> "fabric-loader" to getLatestFabric(mcVersion)
-            "quilt" -> "quilt-loader" to getLatestQuilt(mcVersion)
             "neoforge" -> "neoforge" to getLatestNeoForge(mcVersion)
             "forge" -> "forge" to getLatestForge(mcVersion)
             else -> loader to "*"
@@ -28,14 +27,6 @@ object LoaderResolver {
     private suspend fun getLatestFabric(mc: String): String {
         return try {
             val url = "https://meta.fabricmc.net/v2/versions/loader/$mc"
-            val resp: List<FabricLoader> = client.get(url).body()
-            resp.firstOrNull()?.loader?.version ?: "*"
-        } catch (e: Exception) { "*" }
-    }
-
-    private suspend fun getLatestQuilt(mc: String): String {
-        return try {
-            val url = "https://meta.quiltmc.org/v3/versions/loader/$mc"
             val resp: List<FabricLoader> = client.get(url).body()
             resp.firstOrNull()?.loader?.version ?: "*"
         } catch (e: Exception) { "*" }

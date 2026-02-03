@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.core.main
 import org.kvxd.pakmc.commands.AddCommand
 import org.kvxd.pakmc.commands.BuildCommand
 import org.kvxd.pakmc.commands.InitCommand
+import org.kvxd.pakmc.commands.UpdateCommand
 
 class PakMCCommand : CliktCommand(name = "pakmc") {
 
@@ -19,6 +20,7 @@ fun main(args: Array<String>) {
             InitCommand(),
             AddCommand(),
             BuildCommand(),
+            UpdateCommand(),
             CompletionCommand()
         )
         .main(args)

@@ -16,6 +16,7 @@ data class MrVersion(
     val id: String,
     val project_id: String,
     val version_number: String,
+    val version_type: String,
     val files: List<MrFile>,
     val dependencies: List<MrDependency> = emptyList()
 )
@@ -56,6 +57,7 @@ data class CfFile(
     val fileName: String,
     val fileLength: Long,
     val downloadUrl: String? = null,
+    val releaseType: Int,
     val hashes: List<CfHash>,
     val gameVersions: List<String>,
     val dependencies: List<CfFileDependency> = emptyList()
