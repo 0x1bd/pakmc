@@ -69,7 +69,12 @@ class AddCommand : CliktCommand(name = "add") {
             val (query, detectedProvider) = resolveIdentity(rawQuery, defaultNormProvider)
 
             if (detectedProvider == "mr") {
-                addModrinthRecursive(query, version, config, side, depth = 0)
+                val foundOnMr = addModrinthRecursive(query, version, config, side, depth = 0)
+
+                val isDirectUrl = rawQuery.contains("modrinth.com")
+                if (!foundOnMr && !isDirectUrl) {
+                    fallbackToCurseForge(query, version, config, side, cfKey)
+                }
             } else {
                 addCurseForgeRecursive(query, version, config, side, cfKey, depth = 0)
             }
@@ -90,13 +95,32 @@ class AddCommand : CliktCommand(name = "add") {
         return input to defaultProvider
     }
 
-    private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, requestedSide: String, depth: Int) {
+    private suspend fun fallbackToCurseForge(query: String, version: String?, config: PakConfig, side: String, key: String?) {
+        val mod = CurseForgeApi.searchMod(query, key)
+
+        if (mod != null) {
+            t.println(yellow("? Project '$query' not found on Modrinth."))
+            t.print(white("  Found ") + cyan(mod.name) + white(" on CurseForge. Add this mod? [Y/n] "))
+
+            val input = readlnOrNull()?.trim()?.lowercase() ?: ""
+            if (input.isEmpty() || input == "y" || input == "yes") {
+                addCurseForgeRecursive(mod.id.toString(), version, config, side, key, depth = 0)
+            } else {
+                t.println(yellow("ℹ\uFE0F  Skipped fallback for '$query'."))
+            }
+        } else {
+            t.println(red("! '$query' not found on Modrinth or CurseForge."))
+        }
+    }
+
+    private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, requestedSide: String, depth: Int): Boolean {
         val project = ModrinthApi.getProject(query) ?: run {
-            t.println(red("! Project '$query' not found on Modrinth."))
-            return
+            if (depth != 0)
+                t.println(red("! Project '$query' not found on Modrinth (dependency)."))
+            return false
         }
 
-        if (visitedProjects.contains(project.id)) return
+        if (visitedProjects.contains(project.id)) return true
         visitedProjects.add(project.id)
 
         val detectedSide = when {
@@ -110,7 +134,7 @@ class AddCommand : CliktCommand(name = "add") {
         val versions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
         if (versions.isEmpty()) {
             t.println(red("! No valid versions found for '") + white(project.title) + red("' on ${config.loader} ${config.mcVersion}"))
-            return
+            return true
         }
 
         val selected = versionId?.let { v -> versions.find { it.id == v || it.version_number == v } }
@@ -118,7 +142,7 @@ class AddCommand : CliktCommand(name = "add") {
 
         if (selected == null) {
             t.println(red("! Version '$versionId' not found for '") + white(project.title) + red("'"))
-            return
+            return true
         }
 
         val isAlreadyInstalled = shouldSkip(project.id, project.slug)
@@ -146,6 +170,7 @@ class AddCommand : CliktCommand(name = "add") {
                 addModrinthRecursive(pid, dep.version_id, config, requestedSide, depth + 1)
             }
         }
+        return true
     }
 
     private suspend fun addCurseForgeRecursive(query: String, version: String?, config: PakConfig, side: String, key: String?, depth: Int) {
