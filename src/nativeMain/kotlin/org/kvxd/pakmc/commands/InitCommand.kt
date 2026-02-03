@@ -3,6 +3,7 @@ package org.kvxd.pakmc.commands
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.mordant.rendering.TextColors.*
@@ -17,6 +18,7 @@ class InitCommand : CliktCommand(name = "init") {
     private val name by argument(help = "Name of the modpack")
     private val mc by option("--mc", help = "Minecraft Version").required()
     private val loader by option("--loader", help = "Mod Loader (neoforge, fabric, forge)").required()
+    private val author by option("--author", help = "Modpack author").default("Unknown")
     private val cfKey by option("--cf-key", help = "CurseForge API Key (optional, saves to config)")
     private val t = Terminal()
 
@@ -32,6 +34,7 @@ class InitCommand : CliktCommand(name = "init") {
 
         val config = PakConfig(
             name = name,
+            author = author,
             mcVersion = mc,
             loader = loader,
             curseForgeApiKey = cfKey
