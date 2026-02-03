@@ -8,14 +8,14 @@ on:
 jobs:
   build-native:
     runs-on: ubuntu-latest
-    container: amazoncorretto:21
+    container: amazoncorretto:21-al2023
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install native dependencies
         run: |
-          yum install -y tar gzip libcurl-devel openssl-devel
+          dnf install -y tar gzip libcurl-devel openssl-devel
 
       - name: Make gradlew executable
         run: chmod +x gradlew
