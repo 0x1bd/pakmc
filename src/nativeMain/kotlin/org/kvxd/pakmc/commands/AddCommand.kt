@@ -23,7 +23,7 @@ class AddCommand : CliktCommand(name = "add") {
 
     private val queries by argument(help = "Mod slug(s), ID(s), URL(s), or name(s)").multiple(required = true)
 
-    private val version by argument(help = "Specific version (applies to all if multiple mods)").optional()
+    private val version by option("-v", "--version", help = "Specific version")
 
     private val provider by option("--provider", help = "Default mod provider (overridden if URL provided)").choice("mr", "modrinth", "cf", "curseforge")
         .default("mr")
