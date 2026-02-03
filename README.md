@@ -21,7 +21,7 @@ modpacks with automatic dependency resolution and support for multiple mod provi
 `pakmc` is compiled as a native binary. Ensure you have `zip` installed on your system path for the compression step.
 
 ```bash
-git clone https://github.com/your-repo/pakmc
+git clone https://github.com/0x1bd/pakmc
 cd pakmc
 
 ./gradlew nativeBinaries
