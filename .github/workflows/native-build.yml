@@ -4,21 +4,18 @@ on:
   push:
     branches: [ main ]
   pull_request:
-  workflow_dispatch:
 
 jobs:
   build-native:
     runs-on: ubuntu-latest
-    container: eclipse-temurin:21-jdk-focal
+    container: amazoncorretto:21
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install native dependencies
         run: |
-          apt-get update
-          apt-get install -y libcurl4-openssl-dev git
-          update-ca-certificates
+          yum install -y tar gzip libcurl-devel openssl-devel
 
       - name: Make gradlew executable
         run: chmod +x gradlew
