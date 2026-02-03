@@ -4,7 +4,6 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
-import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.choice
@@ -23,7 +22,7 @@ class AddCommand : CliktCommand(name = "add") {
 
     private val queries by argument(help = "Mod slug(s), ID(s), URL(s), or name(s)").multiple(required = true)
 
-    private val version by option("-v", "--version", help = "Specific version")
+    private val version by option("-v", "--version", help = "Specific version (applies to all if multiple mods)")
 
     private val provider by option("--provider", help = "Default mod provider (overridden if URL provided)").choice("mr", "modrinth", "cf", "curseforge")
         .default("mr")
@@ -31,8 +30,11 @@ class AddCommand : CliktCommand(name = "add") {
     private val apiKey by option("--api-key", help = "CurseForge API Key (optional, defaults to built-in)")
 
     private val t = Terminal()
+
     private val addedSlugs = mutableSetOf<String>()
     private val addedIds = mutableSetOf<String>()
+
+    private val visitedProjects = mutableSetOf<String>()
 
     override fun help(context: Context): String = "Add mod(s) to the pack"
 
@@ -41,6 +43,8 @@ class AddCommand : CliktCommand(name = "add") {
             t.println(red("Error: Not a pakmc directory (missing pakmc.json)"))
             return@runBlocking
         }
+
+        visitedProjects.clear()
 
         val configStr = fs.read("pakmc.json".toPath()) { readUtf8() }
         val config = jsonFormat.decodeFromString<PakConfig>(configStr)
@@ -87,18 +91,13 @@ class AddCommand : CliktCommand(name = "add") {
     }
 
     private suspend fun addModrinthRecursive(query: String, versionId: String?, config: PakConfig, side: String, depth: Int) {
-        if (depth > 0 && shouldSkip(query)) return
-
         val project = ModrinthApi.getProject(query) ?: run {
             t.println(red("! Project '$query' not found on Modrinth."))
             return
         }
 
-        if (shouldSkip(project.id, project.slug)) {
-            if (depth == 0)
-                t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
-            return
-        }
+        if (visitedProjects.contains(project.id)) return
+        visitedProjects.add(project.id)
 
         val versions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
         if (versions.isEmpty()) {
@@ -114,17 +113,25 @@ class AddCommand : CliktCommand(name = "add") {
             return
         }
 
-        val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
+        val isAlreadyInstalled = shouldSkip(project.id, project.slug)
 
-        printModStatus(project.title, isManual = false, manualLink = null, depth = depth)
+        if (!isAlreadyInstalled) {
+            val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
 
-        saveMeta(LocalModMeta(
-            name = project.title, slug = project.slug, provider = "mr", side = side,
-            fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
-            fileSize = file.size, projectId = project.id
-        ))
+            printModStatus(project.title, isManual = false, manualLink = null, depth = depth)
 
-        track(project.id, project.slug)
+            saveMeta(LocalModMeta(
+                name = project.title, slug = project.slug, provider = "mr", side = side,
+                fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
+                fileSize = file.size, projectId = project.id
+            ))
+
+            track(project.id, project.slug)
+        } else {
+            if (depth == 0) {
+                t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
+            }
+        }
 
         selected.dependencies.filter { it.dependency_type == "required" }.forEach { dep ->
             dep.project_id?.let { pid ->
@@ -134,8 +141,6 @@ class AddCommand : CliktCommand(name = "add") {
     }
 
     private suspend fun addCurseForgeRecursive(query: String, version: String?, config: PakConfig, side: String, key: String?, depth: Int) {
-        if (depth > 0 && shouldSkip(query)) return
-
         val mod = query.toIntOrNull()?.let { CurseForgeApi.getMod(it, key) } ?: CurseForgeApi.searchMod(query, key)
 
         if (mod == null) {
@@ -143,12 +148,8 @@ class AddCommand : CliktCommand(name = "add") {
             return
         }
 
-        if (shouldSkip(mod.id.toString(), mod.slug)) {
-            if (depth == 0) {
-                t.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
-            }
-            return
-        }
+        if (visitedProjects.contains(mod.id.toString())) return
+        visitedProjects.add(mod.id.toString())
 
         val files = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
         val selected = version?.let { v -> files.find { it.displayName.contains(v) || it.fileName.contains(v) } }
@@ -159,27 +160,35 @@ class AddCommand : CliktCommand(name = "add") {
             return
         }
 
-        val sha1 = selected.hashes.find { it.algo == 1 }?.value ?: ""
-        val isManual = selected.downloadUrl == null
-        val dUrl = selected.downloadUrl ?: ""
-        val manualLink = "https://www.curseforge.com/minecraft/mc-mods/${mod.slug}/download/${selected.id}"
+        val isAlreadyInstalled = shouldSkip(mod.id.toString(), mod.slug)
 
-        printModStatus(mod.name, isManual, manualLink, depth)
+        if (!isAlreadyInstalled) {
+            val sha1 = selected.hashes.find { it.algo == 1 }?.value ?: ""
+            val isManual = selected.downloadUrl == null
+            val dUrl = selected.downloadUrl ?: ""
+            val manualLink = "https://www.curseforge.com/minecraft/mc-mods/${mod.slug}/download/${selected.id}"
 
-        saveMeta(LocalModMeta(
-            name = mod.name,
-            slug = mod.slug,
-            provider = if (isManual) "cf_manual" else "cf",
-            side = side,
-            fileName = selected.fileName,
-            hashes = mapOf("sha1" to sha1),
-            downloadUrl = dUrl,
-            fileSize = selected.fileLength,
-            projectId = mod.id.toString(),
-            manualLink = if (isManual) manualLink else null
-        ))
+            printModStatus(mod.name, isManual, manualLink, depth)
 
-        track(mod.id.toString(), mod.slug)
+            saveMeta(LocalModMeta(
+                name = mod.name,
+                slug = mod.slug,
+                provider = if (isManual) "cf_manual" else "cf",
+                side = side,
+                fileName = selected.fileName,
+                hashes = mapOf("sha1" to sha1),
+                downloadUrl = dUrl,
+                fileSize = selected.fileLength,
+                projectId = mod.id.toString(),
+                manualLink = if (isManual) manualLink else null
+            ))
+
+            track(mod.id.toString(), mod.slug)
+        } else {
+            if (depth == 0) {
+                t.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
+            }
+        }
 
         selected.dependencies.filter { it.relationType == 3 }.forEach { dep ->
             val depId = dep.modId.toString()
