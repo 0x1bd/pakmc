@@ -1,0 +1,39 @@
+name: Build Native Executable
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-native:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build native executable
+        run: ./gradlew linkReleaseExecutableNative --no-daemon
+
+      - name: Rename artifact
+        run: |
+          cp build/bin/native/releaseExecutable/pakmc.kexe pakmc
+          chmod +x pakmc
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pakmc
+          path: pakmc
