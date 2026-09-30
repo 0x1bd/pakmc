@@ -8,7 +8,8 @@ data class MrProject(
     val slug: String,
     val title: String,
     val client_side: String,
-    val server_side: String
+    val server_side: String,
+    val environment: List<String> = emptyList()
 )
 
 @Serializable
@@ -19,7 +20,8 @@ data class MrVersion(
     val version_type: String,
     val date_published: String,
     val files: List<MrFile>,
-    val dependencies: List<MrDependency> = emptyList()
+    val dependencies: List<MrDependency> = emptyList(),
+    val environment: String? = null
 )
 
 @Serializable

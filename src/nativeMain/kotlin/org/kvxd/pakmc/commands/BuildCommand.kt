@@ -73,11 +73,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
                 }
             }
 
-            val env = when (meta.side) {
-                "client" -> MrPackEnv("required", "unsupported")
-                "server" -> MrPackEnv("unsupported", "required")
-                else -> MrPackEnv("required", "required")
-            }
+            val env = ModSide.toMrPackEnvironment(meta.side)
 
             mrFiles.add(MrPackFile(
                 path = "mods/${meta.fileName}",
@@ -110,7 +106,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         fs.createDirectories(buildDir / "mods")
 
         ModIO.getAllMods().forEach { meta ->
-            if (meta.side == "client") return@forEach
+            if (!ModSide.isIncludedOnServer(meta.side)) return@forEach
             val dest = buildDir / "mods" / meta.fileName
 
             if (meta.downloadUrl.isBlank()) {

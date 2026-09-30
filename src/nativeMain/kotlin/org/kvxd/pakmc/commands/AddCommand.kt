@@ -11,6 +11,7 @@ import org.kvxd.pakmc.api.CurseForgeApi
 import org.kvxd.pakmc.api.ModrinthApi
 import org.kvxd.pakmc.core.PakCommand
 import org.kvxd.pakmc.models.LocalModMeta
+import org.kvxd.pakmc.models.ModSide
 import org.kvxd.pakmc.models.PakConfig
 import org.kvxd.pakmc.utils.ModIO
 import org.kvxd.pakmc.utils.VersionSelector
@@ -32,7 +33,14 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         "cf",
         "curseforge"
     ).default("mr")
-    private val side by option("--side", help = "Side restriction").choice("c", "client", "s", "server").default("both")
+    private val side by option("--side", help = "Side restriction").choice(
+        "c",
+        "client",
+        "s",
+        "server",
+        "d",
+        "dedicated-server"
+    ).default(ModSide.BOTH)
     private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
     private val apiKey by option("--api-key", help = "CurseForge API Key")
 
@@ -43,19 +51,20 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
 
         val defaultNormProvider = if (provider in listOf("cf", "curseforge")) "cf" else "mr"
         val cfKey = apiKey ?: config.curseForgeApiKey
+        val normalizedSide = ModSide.normalize(side)
 
         queries.forEach { rawQuery ->
             val (query, detectedProvider) = resolveIdentity(rawQuery, defaultNormProvider)
 
             if (detectedProvider == "mr") {
-                val foundOnMr = addModrinthRecursive(query, version, config, side, depth = 0)
+                val foundOnMr = addModrinthRecursive(query, version, config, normalizedSide, depth = 0)
                 val isDirectUrl = rawQuery.contains("modrinth.com")
 
                 if (!foundOnMr && !isDirectUrl) {
-                    fallbackToCurseForge(query, version, config, side, cfKey)
+                    fallbackToCurseForge(query, version, config, normalizedSide, cfKey)
                 }
             } else {
-                addCurseForgeRecursive(query, version, config, side, cfKey, depth = 0)
+                addCurseForgeRecursive(query, version, config, normalizedSide, cfKey, depth = 0)
             }
         }
     }
@@ -109,13 +118,6 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         if (visitedProjects.contains(project.id)) return true
         visitedProjects.add(project.id)
 
-        val detectedSide = when {
-            project.client_side == "unsupported" && project.server_side != "unsupported" -> "server"
-            project.server_side == "unsupported" && project.client_side != "unsupported" -> "client"
-            else -> "both"
-        }
-        val effectiveSide = if (requestedSide == "both") detectedSide else requestedSide
-
         val allVersions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
         val compatibleVersions = if (allowUnstable) allVersions else allVersions.filter { it.version_type == "release" }
 
@@ -136,6 +138,9 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             if (!selectVersion) t.println(red("! Version not found or selection cancelled."))
             return true
         }
+
+        val detectedSide = ModSide.fromModrinth(selected.environment, project)
+        val effectiveSide = if (requestedSide == ModSide.BOTH) detectedSide else requestedSide
 
         val currentMod = ModIO.findLocalMod(project.slug)
         val isAlreadyInstalled = currentMod != null && currentMod.projectId == project.id
