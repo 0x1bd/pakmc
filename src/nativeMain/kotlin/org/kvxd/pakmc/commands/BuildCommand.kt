@@ -75,12 +75,14 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
 
             val env = ModSide.toMrPackEnvironment(meta.side)
 
-            mrFiles.add(MrPackFile(
-                path = "mods/${meta.fileName}",
-                hashes = finalHashes,
-                env = env,
-                downloads = listOf(meta.downloadUrl)
-            ))
+            mrFiles.add(
+                MrPackFile(
+                    path = "mods/${meta.fileName}",
+                    hashes = finalHashes,
+                    env = env,
+                    downloads = listOf(meta.downloadUrl)
+                )
+            )
         }
 
         val index = MrPackIndex(
@@ -135,16 +137,20 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         fs.list(src).forEach { file ->
             val d = dest / file.name
             if (fs.metadata(file).isDirectory) copyDir(file, d)
-            else if(!fs.exists(d)) fs.copy(file, d)
+            else if (!fs.exists(d)) fs.copy(file, d)
         }
     }
 
     private fun zipDir(src: Path, outName: String) {
         t.println(gray(" -> Compressing..."))
-        if (runCommand("cd $src && zip -q -r ../../$outName .") == 0) {
+        val source = shellQuote(src.toString())
+        val output = shellQuote("../../$outName")
+        if (runCommand("cd $source && zip -q -r $output .") == 0) {
             t.println(green("Success: ") + white(outName))
         } else {
             t.println(red("Error: Zip command failed."))
         }
     }
+
+    private fun shellQuote(argument: String): String = "'${argument.replace("'", "'\"'\"'")}'"
 }
