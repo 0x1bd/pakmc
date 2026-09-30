@@ -7,6 +7,7 @@ import org.kvxd.pakmc.api.CurseForgeApi
 import org.kvxd.pakmc.api.ModrinthApi
 import org.kvxd.pakmc.core.PakCommand
 import org.kvxd.pakmc.models.LocalModMeta
+import org.kvxd.pakmc.models.ModSide
 import org.kvxd.pakmc.models.PakConfig
 import org.kvxd.pakmc.utils.ModIO
 
@@ -48,12 +49,28 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
             val latest = validVersions.firstOrNull() ?: return false
 
             val latestFile = latest.files.find { it.filename.endsWith(".jar") } ?: latest.files.first()
+            val detectedSide = if (meta.sideOverride) {
+                meta.side
+            } else {
+                ModSide.fromModrinthEnvironment(latest.environment)
+                    ?: ModrinthApi.getProject(meta.slug)?.let { ModSide.fromModrinth(null, it) }
+                    ?: meta.side
+            }
+            val fileChanged = latestFile.filename != meta.fileName
+            val sideChanged = detectedSide != meta.side
 
-            if (latestFile.filename != meta.fileName) {
+            if (fileChanged) {
                 t.println(green("↑ Updating ") + white(meta.name) + gray(": ${meta.fileName} -> ${latestFile.filename}"))
+            }
+            if (sideChanged) {
+                t.println(green("↔ Correcting side ") + white(meta.name) + gray(": ${meta.side} -> $detectedSide"))
+            }
+
+            if (fileChanged || sideChanged) {
                 ModIO.save(meta.copy(
-                    fileName = latestFile.filename, hashes = latestFile.hashes,
-                    downloadUrl = latestFile.url, fileSize = latestFile.size
+                    side = detectedSide, fileName = latestFile.filename,
+                    hashes = latestFile.hashes, downloadUrl = latestFile.url,
+                    fileSize = latestFile.size
                 ))
 
                 return true

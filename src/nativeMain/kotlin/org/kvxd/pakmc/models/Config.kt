@@ -18,6 +18,7 @@ data class LocalModMeta(
     val slug: String,
     val provider: String,
     val side: String,
+    val sideOverride: Boolean = false,
     val fileName: String,
     val hashes: Map<String, String>,
     val downloadUrl: String,

@@ -40,7 +40,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         "server",
         "d",
         "dedicated-server"
-    ).default(ModSide.BOTH)
+    )
     private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
     private val apiKey by option("--api-key", help = "CurseForge API Key")
 
@@ -51,7 +51,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
 
         val defaultNormProvider = if (provider in listOf("cf", "curseforge")) "cf" else "mr"
         val cfKey = apiKey ?: config.curseForgeApiKey
-        val normalizedSide = ModSide.normalize(side)
+        val normalizedSide = side?.let(ModSide::normalize)
 
         queries.forEach { rawQuery ->
             val (query, detectedProvider) = resolveIdentity(rawQuery, defaultNormProvider)
@@ -83,7 +83,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         query: String,
         version: String?,
         config: PakConfig,
-        side: String,
+        side: String?,
         key: String?
     ) {
         val mod = CurseForgeApi.searchMod(query, key)
@@ -107,7 +107,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         query: String,
         versionId: String?,
         config: PakConfig,
-        requestedSide: String,
+        requestedSide: String?,
         depth: Int
     ): Boolean {
         val project = ModrinthApi.getProject(query) ?: run {
@@ -140,7 +140,8 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         }
 
         val detectedSide = ModSide.fromModrinth(selected.environment, project)
-        val effectiveSide = if (requestedSide == ModSide.BOTH) detectedSide else requestedSide
+        val hasSideOverride = depth == 0 && requestedSide != null
+        val effectiveSide = if (hasSideOverride) requireNotNull(requestedSide) else detectedSide
 
         val currentMod = ModIO.findLocalMod(project.slug)
         val isAlreadyInstalled = currentMod != null && currentMod.projectId == project.id
@@ -153,16 +154,24 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             ModIO.save(
                 LocalModMeta(
                     name = project.title, slug = project.slug, provider = "mr", side = effectiveSide,
+                    sideOverride = hasSideOverride,
                     fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
                     fileSize = file.size, projectId = project.id
                 )
             )
         } else {
-            if (depth == 0) t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
+            val updatedSide = if (currentMod.sideOverride && !hasSideOverride) currentMod.side else effectiveSide
+            val updatedOverride = currentMod.sideOverride || hasSideOverride
+            if (updatedSide != currentMod.side || updatedOverride != currentMod.sideOverride) {
+                ModIO.save(currentMod.copy(side = updatedSide, sideOverride = updatedOverride))
+                t.println(green("↔ Updated side: ") + white(project.title) + gray(" -> $updatedSide"))
+            } else if (depth == 0) {
+                t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
+            }
         }
 
         selected.dependencies.filter { it.dependency_type == "required" }.forEach { dep ->
-            dep.project_id?.let { pid -> addModrinthRecursive(pid, dep.version_id, config, effectiveSide, depth + 1) }
+            dep.project_id?.let { pid -> addModrinthRecursive(pid, dep.version_id, config, null, depth + 1) }
         }
 
         return true
@@ -172,7 +181,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         query: String,
         version: String?,
         config: PakConfig,
-        side: String,
+        requestedSide: String?,
         key: String?,
         depth: Int
     ) {
@@ -204,6 +213,8 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
 
         if (selected == null) return
 
+        val side = requestedSide ?: ModSide.BOTH
+
         val currentMod = ModIO.findLocalMod(mod.slug)
         val isAlreadyInstalled = currentMod != null && currentMod.projectId == mod.id.toString()
 
@@ -219,7 +230,8 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             ModIO.save(
                 LocalModMeta(
                     name = mod.name, slug = mod.slug, provider = if (isManual) "cf_manual" else "cf",
-                    side = side, fileName = selected.fileName, hashes = mapOf("sha1" to sha1),
+                    side = side, sideOverride = requestedSide != null,
+                    fileName = selected.fileName, hashes = mapOf("sha1" to sha1),
                     downloadUrl = dUrl, fileSize = selected.fileLength, projectId = mod.id.toString(),
                     manualLink = if (isManual) manualLink else null
                 )

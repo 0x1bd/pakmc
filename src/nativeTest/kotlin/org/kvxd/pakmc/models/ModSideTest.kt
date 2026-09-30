@@ -36,6 +36,8 @@ class ModSideTest {
         assertEquals(ModSide.DEDICATED_SERVER, ModSide.fromModrinth("dedicated_server_only", project))
         assertEquals(ModSide.CLIENT, ModSide.fromModrinth("singleplayer_only", project))
         assertEquals(ModSide.BOTH, ModSide.fromModrinth("client_and_server", project))
+        assertEquals(ModSide.BOTH, ModSide.fromModrinthEnvironment("client_and_server"))
+        assertEquals(null, ModSide.fromModrinthEnvironment("unknown"))
     }
 
     @Test

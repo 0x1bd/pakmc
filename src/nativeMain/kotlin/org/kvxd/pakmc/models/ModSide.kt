@@ -13,10 +13,12 @@ object ModSide {
         else -> side
     }
 
-    fun fromModrinth(versionEnvironment: String?, project: MrProject): String = when (
-        versionEnvironment?.takeUnless { it == "unknown" }
-            ?: project.environment.singleOrNull { it != "unknown" }
-    ) {
+    fun fromModrinth(versionEnvironment: String?, project: MrProject): String =
+        fromModrinthEnvironment(versionEnvironment)
+            ?: project.environment.firstNotNullOfOrNull(::fromModrinthEnvironment)
+            ?: fromLegacyModrinth(project.client_side, project.server_side)
+
+    fun fromModrinthEnvironment(environment: String?): String? = when (environment) {
         "client_only", "singleplayer_only" -> CLIENT
         "server_only" -> SERVER
         "dedicated_server_only" -> DEDICATED_SERVER
@@ -25,7 +27,7 @@ object ModSide {
         "server_only_client_optional",
         "client_or_server",
         "client_or_server_prefers_both" -> BOTH
-        else -> fromLegacyModrinth(project.client_side, project.server_side)
+        else -> null
     }
 
     fun toMrPackEnvironment(side: String): MrPackEnv = when (normalize(side)) {
