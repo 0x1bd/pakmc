@@ -7,6 +7,7 @@ object ModSide {
     const val DEDICATED_SERVER = "dedicated-server"
 
     fun normalize(side: String): String = when (side) {
+        "b" -> BOTH
         "c" -> CLIENT
         "s" -> SERVER
         "d" -> DEDICATED_SERVER
@@ -37,6 +38,8 @@ object ModSide {
     }
 
     fun isIncludedOnServer(side: String): Boolean = normalize(side) != CLIENT
+
+    fun isIncludedOnClient(side: String): Boolean = normalize(side) != DEDICATED_SERVER
 
     private fun fromLegacyModrinth(clientSide: String, serverSide: String): String = when {
         clientSide == "unsupported" && serverSide != "unsupported" -> SERVER

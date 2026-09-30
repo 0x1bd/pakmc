@@ -42,11 +42,20 @@ class ModSideTest {
 
     @Test
     fun normalizesCommandAliasesAndFiltersServerBuilds() {
+        assertEquals(ModSide.BOTH, ModSide.normalize("b"))
         assertEquals(ModSide.CLIENT, ModSide.normalize("c"))
         assertEquals(ModSide.SERVER, ModSide.normalize("s"))
         assertEquals(ModSide.DEDICATED_SERVER, ModSide.normalize("d"))
         assertFalse(ModSide.isIncludedOnServer(ModSide.CLIENT))
         assertTrue(ModSide.isIncludedOnServer(ModSide.SERVER))
         assertTrue(ModSide.isIncludedOnServer(ModSide.DEDICATED_SERVER))
+    }
+
+    @Test
+    fun filtersPhysicalClientPackContents() {
+        assertTrue(ModSide.isIncludedOnClient(ModSide.CLIENT))
+        assertTrue(ModSide.isIncludedOnClient(ModSide.SERVER))
+        assertTrue(ModSide.isIncludedOnClient(ModSide.BOTH))
+        assertFalse(ModSide.isIncludedOnClient(ModSide.DEDICATED_SERVER))
     }
 }

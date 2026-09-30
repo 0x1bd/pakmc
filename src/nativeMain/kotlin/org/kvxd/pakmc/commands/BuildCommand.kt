@@ -18,22 +18,31 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
     private val target by argument(help = "Build target").choice("client", "server")
 
     override suspend fun execute(config: PakConfig) {
-        validateManualMods()
+        validateManualMods(target)
         if (target == "client") buildClient(config) else buildServer(config)
     }
 
-    private fun validateManualMods() {
+    private fun validateManualMods(target: String) {
         val missingMods = ModIO.getAllMods().filter { meta ->
-            meta.downloadUrl.isBlank() && !fs.exists("contents/jarmods/${meta.fileName}".toPath())
+            val included = if (target == "client") {
+                ModSide.isIncludedOnClient(meta.side)
+            } else {
+                ModSide.isIncludedOnServer(meta.side)
+            }
+            included && meta.downloadUrl.isBlank() && !fs.exists("contents/jarmods/${meta.fileName}".toPath())
         }
 
         if (missingMods.isNotEmpty()) {
-            t.println(red(bold("BUILD FAILED: Missing Manual Dependencies")))
-            t.println(white("The following restricted mods must be downloaded manually to: ") + cyan("contents/jarmods/"))
+            t.println(red(bold("BUILD FAILED: Missing Local or Manual Dependencies")))
+            t.println(white("The following files are missing from: ") + cyan("contents/jarmods/"))
             t.println("")
             missingMods.forEach { mod ->
                 t.println(red(" [MISSING] ") + bold(mod.fileName))
-                t.println(gray("    Link: ") + blue(mod.manualLink ?: "Unknown"))
+                if (mod.manualLink != null) {
+                    t.println(gray("    Link: ") + blue(mod.manualLink))
+                } else {
+                    t.println(gray("    Re-add it with: pakmc add <path> --side ${mod.side}"))
+                }
             }
 
             exitProcess(1)
@@ -96,7 +105,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         val overrides = buildDir / "overrides"
         fs.createDirectories(overrides)
         copyDir("contents/configs".toPath(), overrides / "config")
-        copyDir("contents/jarmods".toPath(), overrides / "mods")
+        copyLocalMods(overrides / "mods", ModSide::isIncludedOnClient)
 
         zipDir(buildDir, "${config.name}-${config.version}.mrpack")
     }
@@ -126,9 +135,17 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         }
 
         copyDir("contents/configs".toPath(), buildDir / "config")
-        copyDir("contents/jarmods".toPath(), buildDir / "mods")
 
         zipDir(buildDir, "${config.name}-${config.version}-server.zip")
+    }
+
+    private fun copyLocalMods(destination: Path, isIncluded: (String) -> Boolean) {
+        ModIO.getAllMods()
+            .filter { it.downloadUrl.isBlank() && isIncluded(it.side) }
+            .forEach { meta ->
+                fs.createDirectories(destination)
+                fs.copy("contents/jarmods/${meta.fileName}".toPath(), destination / meta.fileName)
+            }
     }
 
     private fun copyDir(src: Path, dest: Path) {

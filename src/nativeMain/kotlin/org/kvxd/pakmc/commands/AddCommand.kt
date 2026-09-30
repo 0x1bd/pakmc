@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.mordant.rendering.TextColors.*
+import okio.Path.Companion.toPath
 import org.kvxd.pakmc.api.CurseForgeApi
 import org.kvxd.pakmc.api.ModrinthApi
 import org.kvxd.pakmc.core.PakCommand
@@ -15,6 +16,8 @@ import org.kvxd.pakmc.models.ModSide
 import org.kvxd.pakmc.models.PakConfig
 import org.kvxd.pakmc.utils.ModIO
 import org.kvxd.pakmc.utils.VersionSelector
+import org.kvxd.pakmc.utils.calculateHashes
+import org.kvxd.pakmc.utils.fs
 
 class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
 
@@ -31,9 +34,15 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         "mr",
         "modrinth",
         "cf",
-        "curseforge"
+        "curseforge",
+        "local"
     ).default("mr")
-    private val side by option("--side", help = "Side restriction").choice(
+    private val side by option(
+        "--side",
+        help = "Install side (both, client, server, or dedicated-server)"
+    ).choice(
+        "b",
+        "both",
         "c",
         "client",
         "s",
@@ -49,11 +58,20 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
     override suspend fun execute(config: PakConfig) {
         visitedProjects.clear()
 
-        val defaultNormProvider = if (provider in listOf("cf", "curseforge")) "cf" else "mr"
+        val defaultNormProvider = when (provider) {
+            "cf", "curseforge" -> "cf"
+            "local" -> "local"
+            else -> "mr"
+        }
         val cfKey = apiKey ?: config.curseForgeApiKey
         val normalizedSide = side?.let(ModSide::normalize)
 
         queries.forEach { rawQuery ->
+            if (defaultNormProvider == "local" || rawQuery.endsWith(".jar", ignoreCase = true)) {
+                addLocalJar(rawQuery, normalizedSide)
+                return@forEach
+            }
+
             val (query, detectedProvider) = resolveIdentity(rawQuery, defaultNormProvider)
 
             if (detectedProvider == "mr") {
@@ -67,6 +85,67 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                 addCurseForgeRecursive(query, version, config, normalizedSide, cfKey, depth = 0)
             }
         }
+    }
+
+    private fun addLocalJar(rawPath: String, requestedSide: String?) {
+        val source = rawPath.toPath()
+        if (!rawPath.endsWith(".jar", ignoreCase = true)) {
+            t.println(red("! Local mod must be a .jar file: $rawPath"))
+            return
+        }
+        if (!fs.exists(source) || !fs.metadata(source).isRegularFile) {
+            t.println(red("! Local mod not found: $rawPath"))
+            return
+        }
+
+        val fileName = source.name
+        val displayName = fileName.dropLast(4)
+        val slug = displayName
+            .lowercase()
+            .replace(Regex("[^a-z0-9._-]+"), "-")
+            .trim('-')
+        if (slug.isBlank()) {
+            t.println(red("! Could not derive a mod name from: $fileName"))
+            return
+        }
+
+        val existing = ModIO.getAllMods().find { it.slug.equals(slug, ignoreCase = true) }
+        if (existing != null && existing.provider != "local") {
+            t.println(red("! '$slug' is already tracked from ${existing.provider}."))
+            return
+        }
+
+        val hashes = calculateHashes(source, fs)
+        val destination = "contents/jarmods/$fileName".toPath()
+        if (fs.exists(destination)) {
+            val destinationHashes = calculateHashes(destination, fs)
+            if (destinationHashes != hashes) {
+                t.println(red("! A different file already exists at $destination"))
+                return
+            }
+        } else {
+            fs.createDirectories(requireNotNull(destination.parent))
+            fs.copy(source, destination)
+        }
+
+        val side = requestedSide ?: ModSide.BOTH
+        ModIO.save(
+            LocalModMeta(
+                name = displayName,
+                slug = slug,
+                provider = "local",
+                side = side,
+                sideOverride = requestedSide != null,
+                fileName = fileName,
+                hashes = hashes,
+                downloadUrl = "",
+                fileSize = fs.metadata(destination).size ?: 0L,
+                projectId = hashes.getValue("sha1")
+            )
+        )
+
+        val verb = if (existing == null) "Adding" else "Updated"
+        t.println(green("+ $verb local mod: ") + white(fileName) + gray(" ($side)"))
     }
 
     private fun resolveIdentity(input: String, defaultProvider: String): Pair<String, String> {

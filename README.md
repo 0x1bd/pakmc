@@ -69,7 +69,17 @@ pakmc add sodium lithium iris
 
 # Add from CurseForge
 pakmc add appleskin --provider cf
+
+# Add a local JAR and record where it should be installed
+pakmc add ~/Downloads/example-mod.jar --side client
+pakmc add ./server-utility.jar --side dedicated-server
 ```
+
+Local JARs are copied into `contents/jarmods/` and tracked in `contents/mods/` with their hashes and side. Use
+`--side client` for client-only mods, `--side dedicated-server` for mods that must only be in the dedicated server
+archive, or omit `--side` (equivalent to `--side both`) for mods needed on both sides. `--side server` is for
+logical-server mods that are also needed in a client pack for its integrated server. You can also select the local
+provider explicitly with `--provider local`.
 
 #### Handling Manual Downloads
 
@@ -98,7 +108,7 @@ pakmc build server
 
 * `pakmc.json`: Main configuration (Minecraft version, loader, modpack version).
 * `contents/mods/`: Metadata files (`.json`) for every mod in the pack.
-* `contents/jarmods/`: Storage for mods that require manual downloading or local jars.
+* `contents/jarmods/`: Storage for tracked local jars and mods that require manual downloading.
 * `contents/configs/`: Configuration files that should be bundled with the pack.
 * `build/`: Temporary directory for build artifacts.
 
@@ -106,4 +116,4 @@ pakmc build server
 
 ## License
 
-[GPL V3](LICENSE)
+[GPL v3](LICENSE)
