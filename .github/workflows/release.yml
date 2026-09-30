@@ -1,0 +1,89 @@
+name: Release and publish to COPR
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+
+env:
+  COPR_PROJECT: 0x1bd/pakmc
+  COPR_CHROOT: fedora-44-x86_64
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container: amazoncorretto:21-al2023
+
+    steps:
+      - name: Install system dependencies
+        run: dnf install -y findutils git gzip libcurl-devel openssl-devel python3-pip rpm-build tar
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read and validate version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]]; then
+            echo "Unsupported release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build native executable
+        run: ./gradlew assembleReleaseBinary --no-daemon
+
+      - name: Create release archive
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          archive_root="release/pakmc-$VERSION-linux-x86_64"
+          install -Dpm0755 build/release/pakmc "$archive_root/pakmc"
+          install -Dpm0644 LICENSE README.md -t "$archive_root"
+          tar -C release -czf "release/pakmc-$VERSION-linux-x86_64.tar.gz" \
+            "pakmc-$VERSION-linux-x86_64"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/pakmc-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz
+          generate_release_notes: true
+
+      - name: Build source RPM
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          rpm_root="$RUNNER_TEMP/rpmbuild"
+          install -d "$rpm_root/SOURCES" "$rpm_root/SPECS" "$rpm_root/SRPMS"
+          install -m0644 "release/pakmc-$VERSION-linux-x86_64.tar.gz" "$rpm_root/SOURCES/"
+          release_date="$(LC_ALL=C date '+%a %b %d %Y')"
+          sed \
+            -e "s/@VERSION@/$VERSION/g" \
+            -e "s/@DATE@/$release_date/g" \
+            pakmc.spec.in > "$rpm_root/SPECS/pakmc.spec"
+          rpmbuild -bs --define "_topdir $rpm_root" "$rpm_root/SPECS/pakmc.spec"
+
+      - name: Install COPR client
+        run: python3 -m pip install copr-cli
+
+      - name: Submit source RPM to COPR
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+        shell: bash
+        run: |
+          if [[ -z "$COPR_CONFIG" ]]; then
+            echo "The COPR_CONFIG GitHub Actions secret is not configured." >&2
+            exit 1
+          fi
+          install -d -m0700 "$HOME/.config"
+          printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
+          chmod 0600 "$HOME/.config/copr"
+          srpm="$(find "$RUNNER_TEMP/rpmbuild/SRPMS" -name 'pakmc-*.src.rpm' -print -quit)"
+          copr-cli build "$COPR_PROJECT" -r "$COPR_CHROOT" "$srpm"

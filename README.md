@@ -18,16 +18,33 @@ modpacks with automatic dependency resolution and support for multiple mod provi
 
 ## Installation
 
-`pakmc` is compiled as a native binary. Ensure you have `zip` installed on your system path for the compression step.
+### Fedora 44 (COPR)
+
+Install the DNF COPR plugin if it is not already present, enable the repository,
+and install `pakmc`:
+
+```bash
+sudo dnf install dnf5-plugins
+sudo dnf copr enable 0x1bd/pakmc
+sudo dnf install pakmc
+```
+
+After installation, run `pakmc --help` to get started. The package installs
+`zip`, which pakmc needs when it creates modpack archives.
+
+### Build from source
+
+`pakmc` is compiled as a native binary. Install `zip`, `libxcrypt-compat`, a
+JDK 21 or newer, and the development files for libcurl, then run:
 
 ```bash
 git clone https://github.com/0x1bd/pakmc
 cd pakmc
 
-./gradlew nativeBinaries
+./gradlew assembleReleaseBinary
 ```
 
-The binary will be located in `build/bin/native/debugExecutable/pakmc.kexe`.
+The binary will be located at `build/release/pakmc`.
 
 ---
 
@@ -38,7 +55,7 @@ The binary will be located in `build/bin/native/debugExecutable/pakmc.kexe`.
 Create a new project structure and configuration file.
 
 ```bash
-./pakmc.kexe init "My Modpack" --mc 1.21.1 --loader neoforge
+pakmc init "My Modpack" --mc 1.21.1 --loader neoforge
 ```
 
 ### 2. Add Mods
@@ -48,10 +65,10 @@ for CurseForge.
 
 ```bash
 # Add from Modrinth
-./pakmc.kexe add sodium lithium iris
+pakmc add sodium lithium iris
 
 # Add from CurseForge
-./pakmc.kexe add appleskin --provider cf
+pakmc add appleskin --provider cf
 ```
 
 #### Handling Manual Downloads
@@ -69,10 +86,10 @@ Compile your project into a distributable format.
 
 ```bash
 # Build a Modrinth-compatible client pack
-./pakmc.kexe build client
+pakmc build client
 
 # Build a server zip archive
-./pakmc.kexe build server
+pakmc build server
 ```
 
 ---

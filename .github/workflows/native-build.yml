@@ -20,15 +20,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build native executable
-        run: ./gradlew linkReleaseExecutableNative --no-daemon
-
-      - name: Rename artifact
-        run: |
-          cp build/bin/native/releaseExecutable/pakmc.kexe pakmc
-          chmod +x pakmc
+        run: ./gradlew assembleReleaseBinary --no-daemon
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: pakmc
-          path: pakmc
+          path: build/release/pakmc

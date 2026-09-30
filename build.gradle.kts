@@ -52,3 +52,12 @@ kotlin {
         }
     }
 }
+
+tasks.register<Copy>("assembleReleaseBinary") {
+    group = "distribution"
+    description = "Builds the release executable and copies it to build/release/pakmc."
+    dependsOn("linkReleaseExecutableNative")
+    from(layout.buildDirectory.file("bin/native/releaseExecutable/pakmc.kexe"))
+    into(layout.buildDirectory.dir("release"))
+    rename { "pakmc" }
+}

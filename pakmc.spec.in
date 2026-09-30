@@ -1,0 +1,44 @@
+Name:           pakmc
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Command-line tool for managing Minecraft modpacks
+
+License:        GPL-3.0-only
+URL:            https://github.com/0x1bd/pakmc
+Source0:        %{url}/releases/download/v%{version}/%{name}-%{version}-linux-x86_64.tar.gz
+
+ExclusiveArch:  x86_64
+BuildRequires:  libcurl
+BuildRequires:  libxcrypt-compat
+BuildRequires:  zlib
+Requires:       libcurl
+Requires:       libxcrypt-compat
+Requires:       zlib
+Requires:       zip
+
+%global debug_package %{nil}
+
+%description
+pakmc is a command-line tool for creating and maintaining Minecraft modpacks.
+It supports Modrinth and CurseForge, resolves required mod dependencies, and
+builds client Modrinth packs or server archives.
+
+%prep
+%autosetup -n %{name}-%{version}-linux-x86_64
+
+%build
+
+%install
+install -Dpm0755 pakmc %{buildroot}%{_bindir}/pakmc
+
+%check
+%{buildroot}%{_bindir}/pakmc --help >/dev/null
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/pakmc
+
+%changelog
+* @DATE@ 0x1bd <0x1bd@proton.me> - @VERSION@-1
+- Release @VERSION@
