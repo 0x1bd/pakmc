@@ -16,6 +16,25 @@ data class VersionCandidate<T>(
 object VersionSelector {
     private val t = Terminal()
 
+    fun <T> selectForAdd(
+        candidates: List<VersionCandidate<T>>,
+        title: String,
+        allowUnstable: Boolean,
+        confirmUnstable: (VersionCandidate<T>) -> Boolean = { candidate ->
+            val type = candidate.type.replaceFirstChar { it.uppercase() }
+            t.print(yellow("$type '${candidate.displayName}' available for '$title'. Install it? [y/N] "))
+            val answer = readlnOrNull()?.trim()?.lowercase()
+            answer == "y" || answer == "yes"
+        }
+    ): T? {
+        val sorted = candidates.sortedByDescending { it.date }
+        val latest = sorted.firstOrNull() ?: return null
+        if (latest.type == "release" || allowUnstable || confirmUnstable(latest)) {
+            return latest.original
+        }
+        return sorted.firstOrNull { it.type == "release" }?.original
+    }
+
     fun <T> prompt(candidates: List<VersionCandidate<T>>, title: String): T? {
         if (candidates.isEmpty()) return null
 
@@ -55,7 +74,9 @@ object VersionSelector {
 
     fun fromCurseForge(files: List<CfFile>, currentFilename: String? = null): List<VersionCandidate<CfFile>> {
         return files.map { f ->
-            val typeStr = when (f.releaseType) { 1 -> "release"; 2 -> "beta"; else -> "alpha" }
+            val typeStr = when (f.releaseType) {
+                1 -> "release"; 2 -> "beta"; else -> "alpha"
+            }
             VersionCandidate(
                 original = f,
                 displayName = f.displayName,

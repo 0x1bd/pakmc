@@ -51,7 +51,10 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         "d",
         "dedicated-server"
     )
-    private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
+    private val allowUnstable by option(
+        "--allow-unstable",
+        help = "Allow Beta/Alpha versions without confirmation"
+    ).flag(default = false)
     private val apiKey by option("--api-key", help = "CurseForge API Key")
 
     private val visitedProjects = mutableSetOf<String>()
@@ -204,32 +207,32 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         if (depth > 0 && currentMod != null) return true
 
         val allVersions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
-        val compatibleVersions = if (allowUnstable) allVersions else allVersions.filter { it.version_type == "release" }
 
-        if (compatibleVersions.isEmpty()) {
+        if (allVersions.isEmpty()) {
             if (depth == 0) terminal.println(red("! No compatible versions found for '") + white(project.title) + red("'"))
             return true
         }
 
-        val selected = if (depth == 0 && selectVersion) {
-            val candidates = VersionSelector.fromModrinth(compatibleVersions)
-            VersionSelector.prompt(candidates, project.title)
+        val candidates = VersionSelector.fromModrinth(allVersions)
+        val choices = if (depth == 0 && selectVersion) {
+            val choice = VersionSelector.prompt(candidates, project.title) ?: return true
+            candidates.filter { it.original == choice }
         } else {
-            versionId?.let { v -> compatibleVersions.find { it.id == v || it.version_number == v } }
-                ?: compatibleVersions.firstOrNull()
+            versionId?.let { v -> candidates.filter { it.original.id == v || it.original.version_number == v } }
+                ?: candidates
         }
+        val isAlreadyInstalled = currentMod != null && currentMod.provider == "mr" &&
+            currentMod.projectId == project.id
+        val selected = VersionSelector.selectForAdd(choices, project.title, allowUnstable || isAlreadyInstalled)
 
         if (selected == null) {
-            if (!selectVersion) terminal.println(red("! Version not found or selection cancelled."))
+            terminal.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (no version selected)."))
             return true
         }
 
         val detectedSide = ModSide.fromModrinth(selected.environment, project)
         val hasSideOverride = depth == 0 && requestedSide != null
         val effectiveSide = if (hasSideOverride) requireNotNull(requestedSide) else detectedSide
-
-        val isAlreadyInstalled = currentMod != null && currentMod.provider == "mr" &&
-            currentMod.projectId == project.id
 
         if (!isAlreadyInstalled) {
             val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
@@ -285,27 +288,31 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         if (depth > 0 && currentMod != null) return
 
         val allFiles = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
-        val compatibleFiles = if (allowUnstable) allFiles else allFiles.filter { it.releaseType == 1 }
 
-        if (compatibleFiles.isEmpty()) {
+        if (allFiles.isEmpty()) {
             if (depth == 0) terminal.println(red("! No compatible files found for '${mod.name}'"))
             return
         }
 
-        val selected = if (depth == 0 && selectVersion) {
-            val candidates = VersionSelector.fromCurseForge(compatibleFiles)
-            VersionSelector.prompt(candidates, mod.name)
+        val candidates = VersionSelector.fromCurseForge(allFiles)
+        val choices = if (depth == 0 && selectVersion) {
+            val choice = VersionSelector.prompt(candidates, mod.name) ?: return
+            candidates.filter { it.original == choice }
         } else {
-            version?.let { v -> compatibleFiles.find { it.displayName.contains(v) || it.fileName.contains(v) } }
-                ?: compatibleFiles.firstOrNull()
+            version?.let { v -> candidates.filter {
+                it.original.id.toString() == v || it.original.displayName.contains(v) || it.original.fileName.contains(v)
+            } } ?: candidates
         }
-
-        if (selected == null) return
-
-        val side = requestedSide ?: ModSide.BOTH
-
         val isAlreadyInstalled = currentMod != null && currentMod.provider in setOf("cf", "cf_manual") &&
             currentMod.projectId == mod.id.toString()
+        val selected = VersionSelector.selectForAdd(choices, mod.name, allowUnstable || isAlreadyInstalled)
+
+        if (selected == null) {
+            terminal.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (no version selected)."))
+            return
+        }
+
+        val side = requestedSide ?: ModSide.BOTH
 
         if (!isAlreadyInstalled) {
             val sha1 = selected.hashes.find { it.algo == 1 }?.value ?: ""
