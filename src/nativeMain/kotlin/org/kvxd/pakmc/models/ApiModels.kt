@@ -91,7 +91,8 @@ data class MrPackFile(
     val path: String,
     val hashes: Map<String, String>,
     val env: MrPackEnv? = null,
-    val downloads: List<String>
+    val downloads: List<String>,
+    val fileSize: Long
 )
 
 @Serializable

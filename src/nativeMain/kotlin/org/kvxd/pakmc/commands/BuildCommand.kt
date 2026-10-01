@@ -6,6 +6,7 @@ import com.github.ajalt.mordant.rendering.TextColors.*
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.http.isSuccess
 import okio.Path
 import okio.Path.Companion.toPath
 import org.kvxd.pakmc.core.PakCommand
@@ -65,20 +66,28 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         ModIO.getAllMods().forEach { meta ->
             if (meta.downloadUrl.isBlank()) return@forEach
 
-            val finalHashes = if (meta.hashes.containsKey("sha512")) {
+            var fileSize = meta.fileSize
+            val finalHashes = if (
+                !meta.hashes["sha1"].isNullOrBlank() &&
+                !meta.hashes["sha512"].isNullOrBlank() && fileSize > 0
+            ) {
                 meta.hashes
             } else {
                 terminal.println(gray(" -> Computing hashes: ") + white(meta.fileName))
                 val tempPath = buildDir / "${meta.slug}.tmp"
                 try {
-                    val bytes: ByteArray = client.get(meta.downloadUrl).body()
+                    val response = client.get(meta.downloadUrl)
+                    check(response.status.isSuccess()) {
+                        "Download failed for '${meta.name}': HTTP ${response.status.value}"
+                    }
+                    val bytes: ByteArray = response.body()
+                    fileSize = bytes.size.toLong()
                     fs.write(tempPath) { write(bytes) }
-                    val computed = calculateHashes(tempPath, fs)
-                    fs.delete(tempPath)
-                    computed
-                } catch (_: Exception) {
-                    terminal.println(red(" ! Hash failed: ${meta.name}"))
-                    meta.hashes
+                    calculateHashes(tempPath, fs)
+                } catch (e: Exception) {
+                    throw IllegalStateException("Could not prepare '${meta.name}' for the .mrpack: ${e.message}", e)
+                } finally {
+                    fs.delete(tempPath, mustExist = false)
                 }
             }
 
@@ -89,7 +98,8 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
                     path = "mods/${meta.fileName}",
                     hashes = finalHashes,
                     env = env,
-                    downloads = listOf(meta.downloadUrl)
+                    downloads = listOf(meta.downloadUrl),
+                    fileSize = fileSize
                 )
             )
         }
@@ -169,11 +179,15 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
 
     private fun zipDir(src: Path, outName: String) {
         terminal.println(gray(" -> Compressing..."))
+        val temporaryArchive = requireNotNull(src.parent) / "$outName.tmp.zip"
+        fs.delete(temporaryArchive, mustExist = false)
         val source = shellQuote(src.toString())
-        val output = shellQuote("../../$outName")
+        val output = shellQuote("../${temporaryArchive.name}")
         if (runCommand("cd $source && zip -q -r $output .") == 0) {
+            fs.atomicMove(temporaryArchive, outName.toPath())
             terminal.println(green("Success: ") + white(outName))
         } else {
+            fs.delete(temporaryArchive, mustExist = false)
             terminal.println(red("Error: Zip command failed."))
         }
     }
