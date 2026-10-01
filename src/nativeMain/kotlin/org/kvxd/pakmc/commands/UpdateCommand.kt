@@ -21,7 +21,7 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
         val cfKey = apiKey ?: config.curseForgeApiKey
 
         if (mods.isEmpty()) {
-            t.println(yellow("No mods found to update."))
+            terminal.println(yellow("No mods found to update."))
             return
         }
 
@@ -31,14 +31,14 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
             try {
                 if (updateMod(meta, config, cfKey)) updateCount++
             } catch (e: Exception) {
-                t.println(red("! Failed to process ${meta.name}: ${e.message}"))
+                terminal.println(red("! Failed to process ${meta.name}: ${e.message}"))
             }
         }
 
         if (updateCount == 0) {
-            t.println(green("All mods are up to date!"))
+            terminal.println(green("All mods are up to date!"))
         } else {
-            t.println(green("Updated $updateCount mod(s)."))
+            terminal.println(green("Updated $updateCount mod(s)."))
         }
     }
 
@@ -60,10 +60,10 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
             val sideChanged = detectedSide != meta.side
 
             if (fileChanged) {
-                t.println(green("↑ Updating ") + white(meta.name) + gray(": ${meta.fileName} -> ${latestFile.filename}"))
+                terminal.println(green("↑ Updating ") + white(meta.name) + gray(": ${meta.fileName} -> ${latestFile.filename}"))
             }
             if (sideChanged) {
-                t.println(green("↔ Correcting side ") + white(meta.name) + gray(": ${meta.side} -> $detectedSide"))
+                terminal.println(green("↔ Correcting side ") + white(meta.name) + gray(": ${meta.side} -> $detectedSide"))
             }
 
             if (fileChanged || sideChanged) {
@@ -83,7 +83,7 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
             val latest = validFiles.firstOrNull() ?: return false
 
             if (latest.fileName != meta.fileName) {
-                t.println(green("↑ Updating ") + white(meta.name) + gray(": ${meta.fileName} -> ${latest.fileName}"))
+                terminal.println(green("↑ Updating ") + white(meta.name) + gray(": ${meta.fileName} -> ${latest.fileName}"))
 
                 val sha1 = latest.hashes.find { it.algo == 1 }?.value ?: ""
                 val isManual = latest.downloadUrl == null

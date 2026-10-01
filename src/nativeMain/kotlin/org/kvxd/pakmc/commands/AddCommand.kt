@@ -90,11 +90,11 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
     private fun addLocalJar(rawPath: String, requestedSide: String?) {
         val source = rawPath.toPath()
         if (!rawPath.endsWith(".jar", ignoreCase = true)) {
-            t.println(red("! Local mod must be a .jar file: $rawPath"))
+            terminal.println(red("! Local mod must be a .jar file: $rawPath"))
             return
         }
         if (!fs.exists(source) || !fs.metadata(source).isRegularFile) {
-            t.println(red("! Local mod not found: $rawPath"))
+            terminal.println(red("! Local mod not found: $rawPath"))
             return
         }
 
@@ -105,13 +105,13 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             .replace(Regex("[^a-z0-9._-]+"), "-")
             .trim('-')
         if (slug.isBlank()) {
-            t.println(red("! Could not derive a mod name from: $fileName"))
+            terminal.println(red("! Could not derive a mod name from: $fileName"))
             return
         }
 
         val existing = ModIO.getAllMods().find { it.slug.equals(slug, ignoreCase = true) }
         if (existing != null && existing.provider != "local") {
-            t.println(red("! '$slug' is already tracked from ${existing.provider}."))
+            terminal.println(red("! '$slug' is already tracked from ${existing.provider}."))
             return
         }
 
@@ -120,7 +120,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         if (fs.exists(destination)) {
             val destinationHashes = calculateHashes(destination, fs)
             if (destinationHashes != hashes) {
-                t.println(red("! A different file already exists at $destination"))
+                terminal.println(red("! A different file already exists at $destination"))
                 return
             }
         } else {
@@ -145,7 +145,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         )
 
         val verb = if (existing == null) "Adding" else "Updated"
-        t.println(green("+ $verb local mod: ") + white(fileName) + gray(" ($side)"))
+        terminal.println(green("+ $verb local mod: ") + white(fileName) + gray(" ($side)"))
     }
 
     private fun resolveIdentity(input: String, defaultProvider: String): Pair<String, String> {
@@ -168,17 +168,17 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val mod = CurseForgeApi.searchMod(query, key)
 
         if (mod != null) {
-            t.println(yellow("? Project '$query' not found on Modrinth."))
-            t.print(white("  Found ") + cyan(mod.name) + white(" on CurseForge. Add? [Y/n] "))
+            terminal.println(yellow("? Project '$query' not found on Modrinth."))
+            terminal.print(white("  Found ") + cyan(mod.name) + white(" on CurseForge. Add? [Y/n] "))
 
             val input = readlnOrNull()?.trim()?.lowercase() ?: ""
             if (input.isEmpty() || input == "y" || input == "yes") {
                 addCurseForgeRecursive(mod.id.toString(), version, config, side, key, depth = 0)
             } else {
-                t.println(yellow("ℹ\uFE0F  Skipped fallback."))
+                terminal.println(yellow("ℹ\uFE0F  Skipped fallback."))
             }
         } else {
-            t.println(red("! '$query' not found on Modrinth or CurseForge."))
+            terminal.println(red("! '$query' not found on Modrinth or CurseForge."))
         }
     }
 
@@ -190,7 +190,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         depth: Int
     ): Boolean {
         val project = ModrinthApi.getProject(query) ?: run {
-            if (depth > 0) t.println(red("! Project '$query' not found on Modrinth (dependency)."))
+            if (depth > 0) terminal.println(red("! Project '$query' not found on Modrinth (dependency)."))
             return false
         }
 
@@ -201,7 +201,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val compatibleVersions = if (allowUnstable) allVersions else allVersions.filter { it.version_type == "release" }
 
         if (compatibleVersions.isEmpty()) {
-            if (depth == 0) t.println(red("! No compatible versions found for '") + white(project.title) + red("'"))
+            if (depth == 0) terminal.println(red("! No compatible versions found for '") + white(project.title) + red("'"))
             return true
         }
 
@@ -214,7 +214,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         }
 
         if (selected == null) {
-            if (!selectVersion) t.println(red("! Version not found or selection cancelled."))
+            if (!selectVersion) terminal.println(red("! Version not found or selection cancelled."))
             return true
         }
 
@@ -243,9 +243,9 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             val updatedOverride = currentMod.sideOverride || hasSideOverride
             if (updatedSide != currentMod.side || updatedOverride != currentMod.sideOverride) {
                 ModIO.save(currentMod.copy(side = updatedSide, sideOverride = updatedOverride))
-                t.println(green("↔ Updated side: ") + white(project.title) + gray(" -> $updatedSide"))
+                terminal.println(green("↔ Updated side: ") + white(project.title) + gray(" -> $updatedSide"))
             } else if (depth == 0) {
-                t.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
+                terminal.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
             }
         }
 
@@ -267,7 +267,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val mod = query.toIntOrNull()?.let { CurseForgeApi.getMod(it, key) } ?: CurseForgeApi.searchMod(query, key)
 
         if (mod == null) {
-            t.println(red("! Mod '$query' not found on CurseForge."))
+            terminal.println(red("! Mod '$query' not found on CurseForge."))
             return
         }
 
@@ -278,7 +278,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val compatibleFiles = if (allowUnstable) allFiles else allFiles.filter { it.releaseType == 1 }
 
         if (compatibleFiles.isEmpty()) {
-            if (depth == 0) t.println(red("! No compatible files found for '${mod.name}'"))
+            if (depth == 0) terminal.println(red("! No compatible files found for '${mod.name}'"))
             return
         }
 
@@ -304,7 +304,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             val manualLink = "https://www.curseforge.com/minecraft/mc-mods/${mod.slug}/download/${selected.id}"
 
             printModStatus(mod.name, isManual, manualLink, depth, side)
-            if (depth == 0 && side == "both") t.println(yellow("   ⚠ Side defaulted to 'both'."))
+            if (depth == 0 && side == "both") terminal.println(yellow("   ⚠ Side defaulted to 'both'."))
 
             ModIO.save(
                 LocalModMeta(
@@ -316,7 +316,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                 )
             )
         } else {
-            if (depth == 0) t.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
+            if (depth == 0) terminal.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
         }
 
         selected.dependencies.filter { it.relationType == 3 }.forEach { dep ->
@@ -330,10 +330,10 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val sideInfo = if (side != null && side != "both") gray(" ($side)") else ""
 
         if (isManual) {
-            t.println(yellow("$indent$symbol Manual: ") + white(name) + sideInfo)
-            t.println(gray("$indent   Link: ") + blue(manualLink ?: "Unknown"))
+            terminal.println(yellow("$indent$symbol Manual: ") + white(name) + sideInfo)
+            terminal.println(gray("$indent   Link: ") + blue(manualLink ?: "Unknown"))
         } else {
-            t.println(green("$indent$symbol Adding: ") + white(name) + sideInfo)
+            terminal.println(green("$indent$symbol Adding: ") + white(name) + sideInfo)
         }
     }
 }

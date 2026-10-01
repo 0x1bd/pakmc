@@ -15,7 +15,7 @@ abstract class PakCommand(
     private val help: String = ""
 ) : CliktCommand(name = name) {
 
-    protected val t = Terminal()
+    protected val terminal = Terminal()
 
     abstract suspend fun execute(config: PakConfig)
 
@@ -25,7 +25,7 @@ abstract class PakCommand(
         val configPath = "pakmc.json".toPath()
 
         if (!fs.exists(configPath)) {
-            t.println(red("Error: Not a pakmc directory (missing pakmc.json)"))
+            terminal.println(red("Error: Not a pakmc directory (missing pakmc.json)"))
             return@runBlocking
         }
 
@@ -34,7 +34,7 @@ abstract class PakCommand(
             val config = jsonFormat.decodeFromString<PakConfig>(configStr)
             execute(config)
         } catch (e: Exception) {
-            t.println(red("Error loading config: ${e.message}"))
+            terminal.println(red("Error loading config: ${e.message}"))
         }
     }
 }

@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.core.main
 import org.kvxd.pakmc.commands.AddCommand
 import org.kvxd.pakmc.commands.BuildCommand
 import org.kvxd.pakmc.commands.InitCommand
+import org.kvxd.pakmc.commands.ListCommand
 import org.kvxd.pakmc.commands.SelectCommand
 import org.kvxd.pakmc.commands.UpdateCommand
 
@@ -23,6 +24,7 @@ fun main(args: Array<String>) {
             BuildCommand(),
             UpdateCommand(),
             SelectCommand(),
+            ListCommand(),
             CompletionCommand()
         )
         .main(args)

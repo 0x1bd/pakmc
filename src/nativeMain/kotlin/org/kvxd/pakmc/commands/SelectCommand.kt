@@ -25,10 +25,10 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
             val meta = ModIO.findLocalMod(query)
             
             if (meta == null) {
-                t.println(red("! Mod matching '$query' not found installed."))
+                terminal.println(red("! Mod matching '$query' not found installed."))
                 
                 if (query.matches(Regex(".*\\d.*"))) {
-                    t.println(gray("  (Did you mean to use -v \"$query\"?)"))
+                    terminal.println(gray("  (Did you mean to use -v \"$query\"?)"))
                 }
                 return@forEach
             }
@@ -36,20 +36,20 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
             try {
                 processSelection(meta, config, cfKey)
             } catch (e: Exception) {
-                t.println(red("! Error processing '$query': ${e.message}"))
+                terminal.println(red("! Error processing '$query': ${e.message}"))
             }
         }
     }
 
     private suspend fun processSelection(meta: LocalModMeta, config: PakConfig, cfKey: String?) {
-        t.println(blue("Processing ${meta.name} (Current: ${meta.fileName})"))
+        terminal.println(blue("Processing ${meta.name} (Current: ${meta.fileName})"))
 
         if (meta.provider == "mr") {
             handleModrinth(meta, config)
         } else if (meta.provider.startsWith("cf")) {
             handleCurseForge(meta, config, cfKey)
         } else {
-            t.println(red("! Unknown provider: ${meta.provider}"))
+            terminal.println(red("! Unknown provider: ${meta.provider}"))
         }
     }
 
@@ -57,13 +57,13 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
         val versions = ModrinthApi.getVersions(meta.slug, config.loader, config.mcVersion)
         
         if (versions.isEmpty()) {
-            t.println(red("! No versions found for ${meta.name} on ${config.loader} ${config.mcVersion}"))
+            terminal.println(red("! No versions found for ${meta.name} on ${config.loader} ${config.mcVersion}"))
             return
         }
 
         val selected = if (version != null) {
             versions.find { it.id == version || it.version_number == version } ?: run {
-                t.println(red("! Version '$version' not found for ${meta.name}"))
+                terminal.println(red("! Version '$version' not found for ${meta.name}"))
                 return
             }
         } else {
@@ -81,10 +81,10 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
                 fileSize = file.size
             )
             ModIO.save(newMeta)
-            t.println(green("✔ Set ${meta.name} to ${selected.version_number}"))
+            terminal.println(green("✔ Set ${meta.name} to ${selected.version_number}"))
 
         } else {
-            t.println(yellow("ℹ Version already selected."))
+            terminal.println(yellow("ℹ Version already selected."))
         }
     }
 
@@ -93,13 +93,13 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
         val files = CurseForgeApi.getFiles(projectId, config.loader, config.mcVersion, key)
 
         if (files.isEmpty()) {
-            t.println(red("! No files found for ${meta.name} on ${config.loader} ${config.mcVersion}"))
+            terminal.println(red("! No files found for ${meta.name} on ${config.loader} ${config.mcVersion}"))
             return
         }
 
         val selected = if (version != null) {
             files.find { it.displayName.contains(version!!) || it.fileName.contains(version!!) } ?: run {
-                t.println(red("! File matching '$version' not found for ${meta.name}"))
+                terminal.println(red("! File matching '$version' not found for ${meta.name}"))
                 return
             }
         } else {
@@ -121,9 +121,9 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
                 manualLink = if (isManual) manualLink else null
             )
             ModIO.save(newMeta)
-            t.println(green("✔ Set ${meta.name} to ${selected.displayName}"))
+            terminal.println(green("✔ Set ${meta.name} to ${selected.displayName}"))
         } else {
-            t.println(yellow("ℹ Version already selected."))
+            terminal.println(yellow("ℹ Version already selected."))
         }
     }
 }

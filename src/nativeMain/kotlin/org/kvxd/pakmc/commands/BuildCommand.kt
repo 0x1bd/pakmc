@@ -33,15 +33,15 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
         }
 
         if (missingMods.isNotEmpty()) {
-            t.println(red(bold("BUILD FAILED: Missing Local or Manual Dependencies")))
-            t.println(white("The following files are missing from: ") + cyan("contents/jarmods/"))
-            t.println("")
+            terminal.println(red(bold("BUILD FAILED: Missing Local or Manual Dependencies")))
+            terminal.println(white("The following files are missing from: ") + cyan("contents/jarmods/"))
+            terminal.println("")
             missingMods.forEach { mod ->
-                t.println(red(" [MISSING] ") + bold(mod.fileName))
+                terminal.println(red(" [MISSING] ") + bold(mod.fileName))
                 if (mod.manualLink != null) {
-                    t.println(gray("    Link: ") + blue(mod.manualLink))
+                    terminal.println(gray("    Link: ") + blue(mod.manualLink))
                 } else {
-                    t.println(gray("    Re-add it with: pakmc add <path> --side ${mod.side}"))
+                    terminal.println(gray("    Re-add it with: pakmc add <path> --side ${mod.side}"))
                 }
             }
 
@@ -50,11 +50,11 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
     }
 
     private suspend fun buildClient(config: PakConfig) {
-        t.println(bold("Building Client Package (.mrpack)..."))
+        terminal.println(bold("Building Client Package (.mrpack)..."))
 
-        t.println(gray(" -> Resolving loader version for ${config.loader} (MC ${config.mcVersion})..."))
+        terminal.println(gray(" -> Resolving loader version for ${config.loader} (MC ${config.mcVersion})..."))
         val (loaderKey, loaderVer) = LoaderResolver.resolve(config.loader, config.mcVersion)
-        t.println(green(" + Selected Loader: ") + white("$loaderKey $loaderVer"))
+        terminal.println(green(" + Selected Loader: ") + white("$loaderKey $loaderVer"))
 
         val buildDir = "build/client".toPath()
         fs.deleteRecursively(buildDir)
@@ -68,7 +68,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
             val finalHashes = if (meta.hashes.containsKey("sha512")) {
                 meta.hashes
             } else {
-                t.println(gray(" -> Computing hashes: ") + white(meta.fileName))
+                terminal.println(gray(" -> Computing hashes: ") + white(meta.fileName))
                 val tempPath = buildDir / "${meta.slug}.tmp"
                 try {
                     val bytes: ByteArray = client.get(meta.downloadUrl).body()
@@ -77,7 +77,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
                     fs.delete(tempPath)
                     computed
                 } catch (_: Exception) {
-                    t.println(red(" ! Hash failed: ${meta.name}"))
+                    terminal.println(red(" ! Hash failed: ${meta.name}"))
                     meta.hashes
                 }
             }
@@ -111,7 +111,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
     }
 
     private suspend fun buildServer(config: PakConfig) {
-        t.println(bold("Building Server Package (.zip)..."))
+        terminal.println(bold("Building Server Package (.zip)..."))
         val buildDir = "build/server".toPath()
         fs.deleteRecursively(buildDir)
         fs.createDirectories(buildDir / "mods")
@@ -122,14 +122,14 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
 
             if (meta.downloadUrl.isBlank()) {
                 fs.copy("contents/jarmods/${meta.fileName}".toPath(), dest)
-                t.println(cyan(" [LOCAL] ") + white(meta.fileName))
+                terminal.println(cyan(" [LOCAL] ") + white(meta.fileName))
             } else {
-                t.println(gray(" [NET] Downloading: ") + white(meta.fileName))
+                terminal.println(gray(" [NET] Downloading: ") + white(meta.fileName))
                 try {
                     val bytes: ByteArray = client.get(meta.downloadUrl).body()
                     fs.write(dest) { write(bytes) }
                 } catch (_: Exception) {
-                    t.println(red(" ! Download failed: ${meta.name}"))
+                    terminal.println(red(" ! Download failed: ${meta.name}"))
                 }
             }
         }
@@ -159,13 +159,13 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
     }
 
     private fun zipDir(src: Path, outName: String) {
-        t.println(gray(" -> Compressing..."))
+        terminal.println(gray(" -> Compressing..."))
         val source = shellQuote(src.toString())
         val output = shellQuote("../../$outName")
         if (runCommand("cd $source && zip -q -r $output .") == 0) {
-            t.println(green("Success: ") + white(outName))
+            terminal.println(green("Success: ") + white(outName))
         } else {
-            t.println(red("Error: Zip command failed."))
+            terminal.println(red("Error: Zip command failed."))
         }
     }
 
