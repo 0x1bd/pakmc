@@ -34,7 +34,7 @@ After installation, run `pakmc --help` to get started. The package installs
 
 ### Build from source
 
-`pakmc` is compiled as a native binary. Install `zip`, `libxcrypt-compat`, a
+`pakmc` is compiled as a native binary. Install `zip`, a
 JDK 21 or newer, and the development files for libcurl, then run:
 
 ```bash

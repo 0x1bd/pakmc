@@ -16,6 +16,9 @@ kotlin {
     }
 
     linuxX64("native") {
+        binaries.all {
+            linkerOpts("--as-needed")
+        }
         binaries {
             executable {
                 entryPoint = "main"

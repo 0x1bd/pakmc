@@ -9,10 +9,8 @@ Source0:        %{url}/releases/download/v%{version}/%{name}-%{version}-linux-x8
 
 ExclusiveArch:  x86_64
 BuildRequires:  libcurl
-BuildRequires:  libxcrypt-compat
 BuildRequires:  zlib
 Requires:       libcurl
-Requires:       libxcrypt-compat
 Requires:       zlib
 Requires:       zip
 
