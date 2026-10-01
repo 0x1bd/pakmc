@@ -14,6 +14,17 @@ object ModIO {
         fs.write(path) { writeUtf8(jsonFormat.encodeToString(meta)) }
     }
 
+    fun tryRemove(slug: String): Boolean {
+        val path = MODS_DIR.div("${slug}.json")
+
+        if (!fs.exists(path)) {
+            return false
+        }
+
+        fs.delete(path)
+        return !fs.exists(path)
+    }
+
     fun getAllMods(): List<LocalModMeta> {
         if (!fs.exists(MODS_DIR)) return emptyList()
 

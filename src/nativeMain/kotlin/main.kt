@@ -7,6 +7,7 @@ import org.kvxd.pakmc.commands.AddCommand
 import org.kvxd.pakmc.commands.BuildCommand
 import org.kvxd.pakmc.commands.InitCommand
 import org.kvxd.pakmc.commands.ListCommand
+import org.kvxd.pakmc.commands.RemoveCommand
 import org.kvxd.pakmc.commands.SelectCommand
 import org.kvxd.pakmc.commands.UpdateCommand
 
@@ -21,6 +22,7 @@ fun main(args: Array<String>) {
         .subcommands(
             InitCommand(),
             AddCommand(),
+            RemoveCommand(),
             BuildCommand(),
             UpdateCommand(),
             SelectCommand(),
