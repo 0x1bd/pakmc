@@ -37,7 +37,7 @@ class InitCommand : CliktCommand(name = "init") {
             loader = loader, curseForgeApiKey = cfKey
         )
 
-        listOf("contents/mods", "contents/jarmods", "contents/configs").forEach {
+        listOf("contents/mods", "contents/jarmods", "contents/overrides/config").forEach {
             fs.createDirectories(it.toPath())
         }
 

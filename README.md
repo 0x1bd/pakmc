@@ -104,16 +104,6 @@ pakmc build server
 
 ---
 
-## Project Structure
-
-* `pakmc.json`: Main configuration (Minecraft version, loader, modpack version).
-* `contents/mods/`: Metadata files (`.json`) for every mod in the pack.
-* `contents/jarmods/`: Storage for tracked local jars and mods that require manual downloading.
-* `contents/configs/`: Configuration files that should be bundled with the pack.
-* `build/`: Temporary directory for build artifacts.
-
----
-
 ## License
 
 [GPL v3](LICENSE)

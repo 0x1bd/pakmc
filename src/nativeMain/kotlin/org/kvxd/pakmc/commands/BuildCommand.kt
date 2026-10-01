@@ -104,8 +104,8 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
 
         val overrides = buildDir / "overrides"
         fs.createDirectories(overrides)
-        copyDir("contents/configs".toPath(), overrides / "config")
         copyLocalMods(overrides / "mods", ModSide::isIncludedOnClient)
+        copyOverrides("contents".toPath(), overrides)
 
         zipDir(buildDir, "${config.name}-${config.version}.mrpack")
     }
@@ -134,7 +134,7 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
             }
         }
 
-        copyDir("contents/configs".toPath(), buildDir / "config")
+        copyOverrides("contents".toPath(), buildDir)
 
         zipDir(buildDir, "${config.name}-${config.version}-server.zip")
     }
@@ -148,13 +148,22 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
             }
     }
 
+    internal fun copyOverrides(contents: Path, destination: Path) {
+        val legacyConfigs = contents / "configs"
+        if (fs.exists(legacyConfigs)) {
+            terminal.println(yellow(" ! contents/configs is deprecated; move its files into contents/overrides/config."))
+            copyDir(legacyConfigs, destination / "config")
+        }
+        copyDir(contents / "overrides", destination)
+    }
+
     private fun copyDir(src: Path, dest: Path) {
         if (!fs.exists(src)) return
         fs.createDirectories(dest)
         fs.list(src).forEach { file ->
             val d = dest / file.name
             if (fs.metadata(file).isDirectory) copyDir(file, d)
-            else if (!fs.exists(d)) fs.copy(file, d)
+            else fs.copy(file, d)
         }
     }
 
