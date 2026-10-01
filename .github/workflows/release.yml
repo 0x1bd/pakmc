@@ -35,8 +35,8 @@ jobs:
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build native executable
-        run: ./gradlew assembleReleaseBinary --no-daemon
+      - name: Test and build native executable
+        run: ./gradlew nativeTest assembleReleaseBinary --no-daemon
 
       - name: Create release archive
         env:
@@ -52,7 +52,9 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/pakmc-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz
+          files: |
+            build/release/pakmc
+            release/pakmc-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz
           generate_release_notes: true
 
       - name: Build source RPM

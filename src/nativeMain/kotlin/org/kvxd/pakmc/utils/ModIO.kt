@@ -46,7 +46,8 @@ object ModIO {
             val meta = tryParse(path) ?: return@firstNotNullOfOrNull null
 
             if (meta.slug.equals(query, ignoreCase = true) ||
-                meta.name.contains(query, ignoreCase = true)) {
+                meta.name.contains(query, ignoreCase = true)
+            ) {
                 meta
             } else {
                 null
@@ -57,6 +58,22 @@ object ModIO {
     private fun tryParse(path: okio.Path): LocalModMeta? {
         return try {
             jsonFormat.decodeFromString<LocalModMeta>(fs.read(path) { readUtf8() })
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
     }
+}
+
+internal fun List<LocalModMeta>.findInstalledMod(
+    provider: String,
+    projectId: String,
+    slug: String,
+    name: String? = null
+): LocalModMeta? {
+    fun sameProvider(mod: LocalModMeta): Boolean =
+        mod.provider.removeSuffix("_manual") == provider.removeSuffix("_manual")
+
+    return find { sameProvider(it) && it.projectId == projectId }
+        ?: find { it.slug.equals(slug, ignoreCase = true) }
+        ?: name?.let { title -> find { !sameProvider(it) && it.name.equals(title, ignoreCase = true) } }
 }

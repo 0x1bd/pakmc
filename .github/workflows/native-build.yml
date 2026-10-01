@@ -19,8 +19,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build native executable
-        run: ./gradlew assembleReleaseBinary --no-daemon
+      - name: Test and build native executable
+        run: ./gradlew nativeTest assembleReleaseBinary --no-daemon
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

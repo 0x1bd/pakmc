@@ -17,6 +17,7 @@ import org.kvxd.pakmc.models.PakConfig
 import org.kvxd.pakmc.utils.ModIO
 import org.kvxd.pakmc.utils.VersionSelector
 import org.kvxd.pakmc.utils.calculateHashes
+import org.kvxd.pakmc.utils.findInstalledMod
 import org.kvxd.pakmc.utils.fs
 
 class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
@@ -194,8 +195,13 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             return false
         }
 
-        if (visitedProjects.contains(project.id)) return true
-        visitedProjects.add(project.id)
+        if (!visitedProjects.add("mr:${project.id}")) return true
+
+        val currentMod = ModIO.getAllMods().findInstalledMod(
+            "mr", project.id, project.slug, if (depth > 0) project.title else null
+        )
+        // Dependencies must not replace an installed mod or change its side or provider
+        if (depth > 0 && currentMod != null) return true
 
         val allVersions = ModrinthApi.getVersions(project.slug, config.loader, config.mcVersion)
         val compatibleVersions = if (allowUnstable) allVersions else allVersions.filter { it.version_type == "release" }
@@ -222,8 +228,8 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         val hasSideOverride = depth == 0 && requestedSide != null
         val effectiveSide = if (hasSideOverride) requireNotNull(requestedSide) else detectedSide
 
-        val currentMod = ModIO.findLocalMod(project.slug)
-        val isAlreadyInstalled = currentMod != null && currentMod.projectId == project.id
+        val isAlreadyInstalled = currentMod != null && currentMod.provider == "mr" &&
+            currentMod.projectId == project.id
 
         if (!isAlreadyInstalled) {
             val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
@@ -271,8 +277,12 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             return
         }
 
-        if (visitedProjects.contains(mod.id.toString())) return
-        visitedProjects.add(mod.id.toString())
+        if (!visitedProjects.add("cf:${mod.id}")) return
+
+        val currentMod = ModIO.getAllMods().findInstalledMod(
+            "cf", mod.id.toString(), mod.slug, if (depth > 0) mod.name else null
+        )
+        if (depth > 0 && currentMod != null) return
 
         val allFiles = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
         val compatibleFiles = if (allowUnstable) allFiles else allFiles.filter { it.releaseType == 1 }
@@ -294,8 +304,8 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
 
         val side = requestedSide ?: ModSide.BOTH
 
-        val currentMod = ModIO.findLocalMod(mod.slug)
-        val isAlreadyInstalled = currentMod != null && currentMod.projectId == mod.id.toString()
+        val isAlreadyInstalled = currentMod != null && currentMod.provider in setOf("cf", "cf_manual") &&
+            currentMod.projectId == mod.id.toString()
 
         if (!isAlreadyInstalled) {
             val sha1 = selected.hashes.find { it.algo == 1 }?.value ?: ""
