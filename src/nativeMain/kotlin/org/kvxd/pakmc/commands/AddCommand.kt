@@ -25,6 +25,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
     private val queries by argument(help = "Mod slug(s), ID(s), URL(s), or name(s)").multiple(required = true)
 
     private val version by option("-v", "--version", help = "Specific version ID")
+    private val pin by option("--pin", help = "Pin explicitly added mods to prevent automatic updates").flag()
     private val selectVersion by option(
         "-sv",
         "--select-version",
@@ -133,6 +134,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         }
 
         val side = requestedSide ?: ModSide.BOTH
+        val isPinned = pin || existing?.pinned == true
         ModIO.save(
             LocalModMeta(
                 name = displayName,
@@ -144,12 +146,14 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                 hashes = hashes,
                 downloadUrl = "",
                 fileSize = fs.metadata(destination).size ?: 0L,
-                projectId = hashes.getValue("sha1")
+                projectId = hashes.getValue("sha1"),
+                pinned = isPinned
             )
         )
 
         val verb = if (existing == null) "Adding" else "Updated"
-        terminal.println(green("+ $verb local mod: ") + white(fileName) + gray(" ($side)"))
+        val pinnedStatus = if (isPinned) yellow(" [pinned]") else ""
+        terminal.println(green("+ $verb local mod: ") + white(fileName) + gray(" ($side)") + pinnedStatus)
     }
 
     private fun resolveIdentity(input: String, defaultProvider: String): Pair<String, String> {
@@ -198,11 +202,13 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             return false
         }
 
-        if (!visitedProjects.add("mr:${project.id}")) return true
-
         val currentMod = ModIO.getAllMods().findInstalledMod(
             "mr", project.id, project.slug, if (depth > 0) project.title else null
         )
+        if (!visitedProjects.add("mr:${project.id}")) {
+            if (depth == 0 && pin && currentMod != null) pinInstalledMod(currentMod)
+            return true
+        }
         // Dependencies must not replace an installed mod or change its side or provider
         if (depth > 0 && currentMod != null) return true
 
@@ -244,15 +250,26 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                     name = project.title, slug = project.slug, provider = "mr", side = effectiveSide,
                     sideOverride = hasSideOverride,
                     fileName = file.filename, hashes = file.hashes, downloadUrl = file.url,
-                    fileSize = file.size, projectId = project.id
+                    fileSize = file.size, projectId = project.id,
+                    pinned = depth == 0 && pin
                 )
             )
         } else {
             val updatedSide = if (currentMod.sideOverride && !hasSideOverride) currentMod.side else effectiveSide
             val updatedOverride = currentMod.sideOverride || hasSideOverride
-            if (updatedSide != currentMod.side || updatedOverride != currentMod.sideOverride) {
-                ModIO.save(currentMod.copy(side = updatedSide, sideOverride = updatedOverride))
-                terminal.println(green("↔ Updated side: ") + white(project.title) + gray(" -> $updatedSide"))
+            val newlyPinned = depth == 0 && pin && !currentMod.pinned
+            val sideChanged = updatedSide != currentMod.side || updatedOverride != currentMod.sideOverride
+            if (sideChanged || newlyPinned) {
+                ModIO.save(currentMod.copy(
+                    side = updatedSide, sideOverride = updatedOverride,
+                    pinned = currentMod.pinned || newlyPinned
+                ))
+                if (sideChanged) {
+                    terminal.println(green("↔ Updated side: ") + white(project.title) + gray(" -> $updatedSide"))
+                }
+                if (newlyPinned) {
+                    terminal.println(green("✔ Pinned ") + white(currentMod.name) + gray(" at ${currentMod.fileName}"))
+                }
             } else if (depth == 0) {
                 terminal.println(yellow("ℹ\uFE0F  Skipped '${project.title}' (already present)"))
             }
@@ -280,11 +297,13 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             return
         }
 
-        if (!visitedProjects.add("cf:${mod.id}")) return
-
         val currentMod = ModIO.getAllMods().findInstalledMod(
             "cf", mod.id.toString(), mod.slug, if (depth > 0) mod.name else null
         )
+        if (!visitedProjects.add("cf:${mod.id}")) {
+            if (depth == 0 && pin && currentMod != null) pinInstalledMod(currentMod)
+            return
+        }
         if (depth > 0 && currentMod != null) return
 
         val allFiles = CurseForgeApi.getFiles(mod.id, config.loader, config.mcVersion, key)
@@ -329,11 +348,16 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                     side = side, sideOverride = requestedSide != null,
                     fileName = selected.fileName, hashes = mapOf("sha1" to sha1),
                     downloadUrl = dUrl, fileSize = selected.fileLength, projectId = mod.id.toString(),
-                    manualLink = if (isManual) manualLink else null
+                    manualLink = if (isManual) manualLink else null,
+                    pinned = depth == 0 && pin
                 )
             )
         } else {
-            if (depth == 0) terminal.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
+            if (depth == 0 && pin) {
+                pinInstalledMod(currentMod)
+            } else if (depth == 0) {
+                terminal.println(yellow("ℹ\uFE0F  Skipped '${mod.name}' (already present)"))
+            }
         }
 
         selected.dependencies.filter { it.relationType == 3 }.forEach { dep ->
@@ -341,16 +365,22 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         }
     }
 
+    private fun pinInstalledMod(meta: LocalModMeta) {
+        if (!meta.pinned) ModIO.save(meta.copy(pinned = true))
+        terminal.println(green("✔ Pinned ") + white(meta.name) + gray(" at ${meta.fileName}"))
+    }
+
     private fun printModStatus(name: String, isManual: Boolean, manualLink: String?, depth: Int, side: String? = null) {
         val indent = "   ".repeat(depth)
         val symbol = if (depth == 0) "+ " else "└─ "
         val sideInfo = if (side != null && side != "both") gray(" ($side)") else ""
+        val pinnedStatus = if (depth == 0 && pin) yellow(" [pinned]") else ""
 
         if (isManual) {
-            terminal.println(yellow("$indent$symbol Manual: ") + white(name) + sideInfo)
+            terminal.println(yellow("$indent$symbol Manual: ") + white(name) + sideInfo + pinnedStatus)
             terminal.println(gray("$indent   Link: ") + blue(manualLink ?: "Unknown"))
         } else {
-            terminal.println(green("$indent$symbol Adding: ") + white(name) + sideInfo)
+            terminal.println(green("$indent$symbol Adding: ") + white(name) + sideInfo + pinnedStatus)
         }
     }
 }

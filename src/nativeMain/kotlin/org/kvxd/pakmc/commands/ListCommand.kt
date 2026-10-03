@@ -9,7 +9,8 @@ class ListCommand: PakCommand(name = "list", help = "List all installed mods") {
 
     override suspend fun execute(config: PakConfig) {
         ModIO.getAllMods().forEach { modMeta ->
-            terminal.println("${modMeta.name} " + gray("(${modMeta.side})"))
+            val pinnedStatus = if (modMeta.pinned) yellow(" [pinned]") else ""
+            terminal.println("${modMeta.name} " + gray("(${modMeta.side})") + pinnedStatus)
         }
     }
 

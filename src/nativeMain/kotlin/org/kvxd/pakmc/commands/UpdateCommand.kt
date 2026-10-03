@@ -11,7 +11,7 @@ import org.kvxd.pakmc.models.ModSide
 import org.kvxd.pakmc.models.PakConfig
 import org.kvxd.pakmc.utils.ModIO
 
-class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the latest version") {
+class UpdateCommand : PakCommand(name = "update", help = "Update all unpinned mods to the latest version") {
 
     private val allowUnstable by option("--allow-unstable", help = "Allow Beta/Alpha versions").flag(default = false)
     private val apiKey by option("--api-key", help = "CurseForge API Key")
@@ -26,8 +26,13 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
         }
 
         var updateCount = 0
+        val pinnedCount = mods.count { it.pinned }
 
         mods.forEach { meta ->
+            if (meta.pinned) {
+                terminal.println(yellow("• Pinned ") + white(meta.name) + gray(": ${meta.fileName} (skipping update)"))
+                return@forEach
+            }
             try {
                 if (updateMod(meta, config, cfKey)) updateCount++
             } catch (e: Exception) {
@@ -35,10 +40,13 @@ class UpdateCommand : PakCommand(name = "update", help = "Update all mods to the
             }
         }
 
-        if (updateCount == 0) {
+        if (updateCount == 0 && pinnedCount > 0) {
+            terminal.println(green("No updates applied. $pinnedCount mod(s) pinned."))
+        } else if (updateCount == 0) {
             terminal.println(green("All mods are up to date!"))
         } else {
-            terminal.println(green("Updated $updateCount mod(s)."))
+            val pinnedSummary = if (pinnedCount > 0) " $pinnedCount mod(s) pinned." else ""
+            terminal.println(green("Updated $updateCount mod(s).$pinnedSummary"))
         }
     }
 

@@ -13,6 +13,7 @@ modpacks with automatic dependency resolution and support for multiple mod provi
     * **Client**: Generates `.mrpack` files compatible with Modrinth and Prism Launcher.
     * **Server**: Generates a `.zip` archive with all necessary server-side mod jars.
 * **Environment Aware**: Handles client-side, server-side, and universal mod restrictions.
+* **Version Pinning**: Keep selected mod versions fixed during updates.
 
 ---
 
@@ -67,6 +68,9 @@ for CurseForge.
 # Add from Modrinth
 pakmc add sodium lithium iris
 
+# Add and pin a specific version
+pakmc add sodium --version <version-id-or-number> --pin
+
 # Add from CurseForge
 pakmc add appleskin --provider cf
 
@@ -90,7 +94,22 @@ If a mod on CurseForge has "3rd Party Distribution" disabled by the author:
 3. You must place the downloaded `.jar` in `contents/jarmods/`.
 4. The `build` command will fail with a list of missing links if these files are not present.
 
-### 3. Build the Pack
+### 3. Select, Pin, and Update Versions
+
+Pin an installed mod at its current version, or select a specific version and pin it:
+
+```bash
+pakmc pin sodium lithium
+pakmc select iris --version <version-id-or-number> --pin
+
+# Update only unpinned mods
+pakmc update
+
+# Allow a mod to update again
+pakmc unpin sodium
+```
+
+### 4. Build the Pack
 
 Compile your project into a distributable format.
 

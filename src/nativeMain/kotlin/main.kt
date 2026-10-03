@@ -7,9 +7,11 @@ import org.kvxd.pakmc.commands.AddCommand
 import org.kvxd.pakmc.commands.BuildCommand
 import org.kvxd.pakmc.commands.InitCommand
 import org.kvxd.pakmc.commands.ListCommand
+import org.kvxd.pakmc.commands.PinCommand
 import org.kvxd.pakmc.commands.RemoveCommand
 import org.kvxd.pakmc.commands.SelectCommand
 import org.kvxd.pakmc.commands.UpdateCommand
+import org.kvxd.pakmc.commands.UnpinCommand
 
 class PakMCCommand : CliktCommand(name = "pakmc") {
 
@@ -26,6 +28,8 @@ fun main(args: Array<String>) {
             BuildCommand(),
             UpdateCommand(),
             SelectCommand(),
+            PinCommand(),
+            UnpinCommand(),
             ListCommand(),
             CompletionCommand()
         )

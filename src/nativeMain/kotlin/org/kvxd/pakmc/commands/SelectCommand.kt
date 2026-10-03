@@ -2,6 +2,7 @@ package org.kvxd.pakmc.commands
 
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.rendering.TextColors.*
 import org.kvxd.pakmc.api.CurseForgeApi
@@ -16,6 +17,7 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
 
     private val modNames by argument(help = "Name or slug of installed mod(s)").multiple(required = true)
     private val version by option("-v", "--version", help = "Target version ID, number, or filename part")
+    private val pin by option("--pin", help = "Pin the selected version to prevent automatic updates").flag()
     private val apiKey by option("--api-key", help = "CurseForge API Key")
 
     override suspend fun execute(config: PakConfig) {
@@ -73,18 +75,21 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
 
         val file = selected.files.find { it.filename.endsWith(".jar") } ?: selected.files.first()
 
-        if (meta.fileName != file.filename) {
+        if (meta.fileName != file.filename || (pin && !meta.pinned)) {
             val newMeta = meta.copy(
                 fileName = file.filename,
                 hashes = file.hashes,
                 downloadUrl = file.url,
-                fileSize = file.size
+                fileSize = file.size,
+                pinned = meta.pinned || pin
             )
             ModIO.save(newMeta)
-            terminal.println(green("✔ Set ${meta.name} to ${selected.version_number}"))
+            val pinnedStatus = if (newMeta.pinned) " (pinned)" else ""
+            terminal.println(green("✔ Set ${meta.name} to ${selected.version_number}$pinnedStatus"))
 
         } else {
-            terminal.println(yellow("ℹ Version already selected."))
+            val pinnedStatus = if (meta.pinned) " (pinned)" else ""
+            terminal.println(yellow("ℹ Version already selected$pinnedStatus."))
         }
     }
 
@@ -97,9 +102,11 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
             return
         }
 
-        val selected = if (version != null) {
-            files.find { it.displayName.contains(version!!) || it.fileName.contains(version!!) } ?: run {
-                terminal.println(red("! File matching '$version' not found for ${meta.name}"))
+        val targetVersion = version
+        val selected = if (targetVersion != null) {
+            (files.find { it.id.toString() == targetVersion }
+                ?: files.find { it.displayName.contains(targetVersion) || it.fileName.contains(targetVersion) }) ?: run {
+                terminal.println(red("! File matching '$targetVersion' not found for ${meta.name}"))
                 return
             }
         } else {
@@ -107,7 +114,7 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
             VersionSelector.prompt(candidates, meta.name) ?: return
         }
 
-        if (meta.fileName != selected.fileName) {
+        if (meta.fileName != selected.fileName || (pin && !meta.pinned)) {
             val sha1 = selected.hashes.find { it.algo == 1 }?.value ?: ""
             val isManual = selected.downloadUrl == null
             val manualLink = "https://www.curseforge.com/minecraft/mc-mods/${meta.slug}/download/${selected.id}"
@@ -118,12 +125,15 @@ class SelectCommand : PakCommand(name = "select", help = "Select a specific vers
                 downloadUrl = selected.downloadUrl ?: "",
                 fileSize = selected.fileLength,
                 provider = if (isManual) "cf_manual" else "cf",
-                manualLink = if (isManual) manualLink else null
+                manualLink = if (isManual) manualLink else null,
+                pinned = meta.pinned || pin
             )
             ModIO.save(newMeta)
-            terminal.println(green("✔ Set ${meta.name} to ${selected.displayName}"))
+            val pinnedStatus = if (newMeta.pinned) " (pinned)" else ""
+            terminal.println(green("✔ Set ${meta.name} to ${selected.displayName}$pinnedStatus"))
         } else {
-            terminal.println(yellow("ℹ Version already selected."))
+            val pinnedStatus = if (meta.pinned) " (pinned)" else ""
+            terminal.println(yellow("ℹ Version already selected$pinnedStatus."))
         }
     }
 }
