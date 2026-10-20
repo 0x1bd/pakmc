@@ -14,6 +14,7 @@ import org.kvxd.pakmc.core.PakCommand
 import org.kvxd.pakmc.models.LocalModMeta
 import org.kvxd.pakmc.models.ModSide
 import org.kvxd.pakmc.models.PakConfig
+import org.kvxd.pakmc.utils.LocalJarNaming
 import org.kvxd.pakmc.utils.ModIO
 import org.kvxd.pakmc.utils.VersionSelector
 import org.kvxd.pakmc.utils.calculateHashes
@@ -103,18 +104,24 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
             return
         }
 
-        val fileName = source.name
-        val displayName = fileName.dropLast(4)
-        val slug = displayName
-            .lowercase()
-            .replace(Regex("[^a-z0-9._-]+"), "-")
-            .trim('-')
+        val displayName = LocalJarNaming.name(source.name)
+        val slug = LocalJarNaming.slug(source.name)
+        val fileName = "$slug.jar"
         if (slug.isBlank()) {
-            terminal.println(red("! Could not derive a mod name from: $fileName"))
+            terminal.println(red("! Could not derive a mod name from: ${source.name}"))
             return
         }
 
-        val existing = ModIO.getAllMods().find { it.slug.equals(slug, ignoreCase = true) }
+        val mods = ModIO.getAllMods()
+        val matchingLocalMods = mods.filter {
+            it.provider == "local" && LocalJarNaming.slug(it.fileName).equals(slug, ignoreCase = true)
+        }
+        val existing = mods.find { it.slug.equals(slug, ignoreCase = true) }
+            ?: matchingLocalMods.singleOrNull()
+        if (matchingLocalMods.size > 1) {
+            terminal.println(red("! Multiple local mods match '$slug'; remove duplicate entries before re-adding."))
+            return
+        }
         if (existing != null && existing.provider != "local") {
             terminal.println(red("! '$slug' is already tracked from ${existing.provider}."))
             return
@@ -125,15 +132,18 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
         if (fs.exists(destination)) {
             val destinationHashes = calculateHashes(destination, fs)
             if (destinationHashes != hashes) {
-                terminal.println(red("! A different file already exists at $destination"))
-                return
+                if (existing?.fileName != fileName || mods.any { it != existing && it.fileName == fileName }) {
+                    terminal.println(red("! A different file already exists at $destination"))
+                    return
+                }
+                fs.copy(source, destination)
             }
         } else {
             fs.createDirectories(requireNotNull(destination.parent))
             fs.copy(source, destination)
         }
 
-        val side = requestedSide ?: ModSide.BOTH
+        val side = requestedSide ?: existing?.side ?: ModSide.BOTH
         val isPinned = pin || existing?.pinned == true
         ModIO.save(
             LocalModMeta(
@@ -141,7 +151,7 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                 slug = slug,
                 provider = "local",
                 side = side,
-                sideOverride = requestedSide != null,
+                sideOverride = requestedSide != null || existing?.sideOverride == true,
                 fileName = fileName,
                 hashes = hashes,
                 downloadUrl = "",
@@ -150,6 +160,13 @@ class AddCommand : PakCommand(name = "add", help = "Add mod(s) to the pack") {
                 pinned = isPinned
             )
         )
+
+        if (existing != null) {
+            if (existing.slug != slug) ModIO.tryRemove(existing.slug)
+            if (existing.fileName != fileName && mods.none { it != existing && it.fileName == existing.fileName }) {
+                fs.delete("contents/jarmods/${existing.fileName}".toPath(), mustExist = false)
+            }
+        }
 
         val verb = if (existing == null) "Adding" else "Updated"
         val pinnedStatus = if (isPinned) yellow(" [pinned]") else ""

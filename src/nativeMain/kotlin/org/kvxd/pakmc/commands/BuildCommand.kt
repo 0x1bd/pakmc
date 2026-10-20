@@ -20,7 +20,23 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
 
     override suspend fun execute(config: PakConfig) {
         validateManualMods(target)
-        if (target == "client") buildClient(config) else buildServer(config)
+        val buildConfig = prepareLoader(config)
+        if (target == "client") buildClient(buildConfig) else buildServer(buildConfig)
+    }
+
+    internal suspend fun prepareLoader(
+        config: PakConfig,
+        resolveLatest: suspend (String, String) -> Pair<String, String> = LoaderResolver::resolve,
+        readAnswer: () -> String? = ::readlnOrNull
+    ): PakConfig {
+        val selected = LoaderVersions.prepare(config, resolveLatest) { current, latest ->
+            terminal.print(yellow("? Update ${config.loader} loader from $current to $latest? [y/N] "))
+            readAnswer()?.trim()?.lowercase() in setOf("y", "yes")
+        }
+        if (selected != config) ConfigIO.save(selected)
+        val pinnedStatus = if (selected.loaderPinned) yellow(" [pinned]") else ""
+        terminal.println(green(" + Selected Loader: ") + white("${selected.loader} ${selected.loaderVersion}") + pinnedStatus)
+        return selected
     }
 
     private fun validateManualMods(target: String) {
@@ -53,9 +69,8 @@ class BuildCommand : PakCommand(name = "build", help = "Build the pack (client .
     private suspend fun buildClient(config: PakConfig) {
         terminal.println(bold("Building Client Package (.mrpack)..."))
 
-        terminal.println(gray(" -> Resolving loader version for ${config.loader} (MC ${config.mcVersion})..."))
-        val (loaderKey, loaderVer) = LoaderResolver.resolve(config.loader, config.mcVersion)
-        terminal.println(green(" + Selected Loader: ") + white("$loaderKey $loaderVer"))
+        val loaderKey = LoaderResolver.dependencyKey(config.loader)
+        val loaderVer = requireNotNull(config.loaderVersion)
 
         val buildDir = "build/client".toPath()
         fs.deleteRecursively(buildDir)

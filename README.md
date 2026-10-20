@@ -13,7 +13,7 @@ modpacks with automatic dependency resolution and support for multiple mod provi
     * **Client**: Generates `.mrpack` files compatible with Modrinth and Prism Launcher.
     * **Server**: Generates a `.zip` archive with all necessary server-side mod jars.
 * **Environment Aware**: Handles client-side, server-side, and universal mod restrictions.
-* **Version Pinning**: Keep selected mod versions fixed during updates.
+* **Version Pinning**: Keep selected mod and loader versions fixed during updates.
 
 ---
 
@@ -107,6 +107,15 @@ pakmc update
 
 # Allow a mod to update again
 pakmc unpin sodium
+
+# Pin the loader at its saved version (or resolve it first if no version has been saved)
+pakmc pin loader
+
+# Choose and pin an exact loader version
+pakmc pin loader --version 21.1.200
+
+# Allow loader updates to be offered again
+pakmc unpin loader
 ```
 
 ### 4. Build the Pack

@@ -7,6 +7,12 @@ import kotlinx.serialization.json.*
 
 object LoaderResolver {
 
+    fun dependencyKey(loader: String): String = when (loader.lowercase()) {
+        "fabric" -> "fabric-loader"
+        "quilt" -> "quilt-loader"
+        else -> loader.lowercase()
+    }
+
     @Serializable
     data class FabricLoader(val loader: VersionObj)
     @Serializable

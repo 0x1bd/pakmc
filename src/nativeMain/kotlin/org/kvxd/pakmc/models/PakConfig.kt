@@ -9,5 +9,7 @@ data class PakConfig(
     val loader: String,
     val version: String = "1.0.0",
     val author: String = "Unknown",
-    val curseForgeApiKey: String? = null
+    val curseForgeApiKey: String? = null,
+    val loaderVersion: String? = null,
+    val loaderPinned: Boolean = false
 )
