@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Install system dependencies
-        run: dnf install -y tar gzip git libcurl-devel openssl-devel
+        run: dnf install -y tar gzip git libcurl-devel openssl-devel zip
 
       - uses: actions/checkout@v4
 

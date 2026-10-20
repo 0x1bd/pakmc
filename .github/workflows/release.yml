@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Install system dependencies
-        run: dnf install -y findutils git gzip libcurl-devel openssl-devel python3-pip rpm-build tar
+        run: dnf install -y findutils git gzip libcurl-devel openssl-devel python3-pip rpm-build tar zip
 
       - name: Check out repository
         uses: actions/checkout@v4
